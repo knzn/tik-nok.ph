@@ -1,0 +1,61 @@
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./server:/usr/src/app/server
+      - ./shared:/usr/src/app/shared
+      - /usr/src/app/server/node_modules
+      - /usr/src/app/shared/node_modules
+      - uploads_data:/usr/src/app/server/uploads
+      - public_data:/usr/src/app/server/public
+    environment:
+      - PORT=3000
+      - MONGODB_URI=mongodb+srv://rdacles08:18DFLI1viyYBHPg3@tiknok.3taqw.mongodb.net/?retryWrites=true&w=majority&appName=Tiknok
+      - JWT_SECRET=your-secret-key-here
+      - CORS_ORIGIN=http://localhost:5173
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - HOST=0.0.0.0
+    depends_on:
+      - redis
+    networks:
+      - app_network
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/usr/src/app/client
+      - ./shared:/usr/src/app/shared
+      - /usr/src/app/client/node_modules
+      - /usr/src/app/shared/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:3000
+      - HOST=0.0.0.0
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  uploads_data:
+  public_data: 

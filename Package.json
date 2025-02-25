@@ -1,0 +1,19 @@
+{
+    "name": "video-sharing-app",
+    "version": "1.0.0",
+    "scripts": {
+        "client": "cd client && npm run dev",
+        "server": "cd server && npm run dev",
+        "dev": "concurrently \"npm run server\" \"npm run client\"",
+        "install:all": "npm install && cd client && npm install && cd ../server && npm install && cd ../shared && npm install"
+    },
+    "devDependencies": {
+        "@types/bcrypt": "^5.0.2",
+        "concurrently": "^8.0.1"
+    },
+    "dependencies": {
+        "@ffmpeg-installer/ffmpeg": "^1.1.0",
+        "bcrypt": "^5.1.1",
+        "ffprobe-static": "^3.1.0"
+    }
+}
