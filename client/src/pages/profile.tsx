@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button'
 import { ProfileSetupModal } from '../components/profile/ProfileSetupModal'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 import { UpdateProfilePictureModal } from '../components/profile/UpdateProfilePictureModal'
-import { Camera, Grid, List, Video, Users, Heart, MessageSquare } from 'lucide-react'
+import { Camera, Grid, List, Video, Users, Heart, MessageSquare, Lock, EyeOff, Eye } from 'lucide-react'
 import { api, followUser, unfollowUser, checkFollowStatus } from '../lib/api'
 import { VideoService } from '../services/video.service'
 import { useQuery } from '@tanstack/react-query'
@@ -28,10 +28,22 @@ const getImageUrl = (url: string | undefined) => {
   return `${url}${url.includes('?') ? '&' : '?'}t=${timestamp}`;
 };
 
+// Helper function to compare IDs safely
+const isSameId = (id1: string | undefined, id2: string | undefined): boolean => {
+  if (!id1 || !id2) return false;
+  return id1 === id2 || id1 === id2.toString();
+};
+
+// Helper function to get a consistent ID from an object that might have id or _id
+const getConsistentId = (obj: any): string | undefined => {
+  if (!obj) return undefined;
+  return obj.id || obj._id;
+};
+
 export function ProfilePage() {
   const { username } = useParams<{ username: string }>()
   const navigate = useNavigate()
-  const { user, updateUser } = useAuthStore()
+  const { user, updateUser, isAuthenticated } = useAuthStore()
   const [profileData, setProfileData] = useState<any>(null)
   const [showSetupModal, setShowSetupModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -44,6 +56,17 @@ export function ProfilePage() {
 
   const isOwnProfile = user?.username === username
 
+  // Log authentication status for debugging
+  useEffect(() => {
+    console.log('Profile page auth status:', {
+      isAuthenticated,
+      userId: user?.id,
+      username: user?.username,
+      profileUsername: username,
+      isOwnProfile
+    });
+  }, [isAuthenticated, user, username, isOwnProfile]);
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -52,6 +75,13 @@ export function ProfilePage() {
           // Fetch personal profile
           const response = await api.get('/users/profile')
           if (response.data) {
+            // Log user data for debugging
+            console.log('Own profile data:', {
+              responseId: response.data._id || response.data.id,
+              userId: user?.id,
+              username: response.data.username
+            });
+            
             await updateUser({
               ...user,
               ...response.data
@@ -64,6 +94,14 @@ export function ProfilePage() {
           // Fetch public profile
           try {
             const response = await api.get(`/users/profile/${username}`)
+            
+            // Log profile data for debugging
+            console.log('Other user profile data:', {
+              responseId: response.data._id || response.data.id,
+              username: response.data.username,
+              currentUserId: user?.id
+            });
+            
             setProfileData(response.data)
             setFollowersCount(response.data.followersCount)
             setFollowingCount(response.data.followingCount)
@@ -138,8 +176,8 @@ export function ProfilePage() {
   };
 
   // Fetch user videos
-  const { data: userVideos, isLoading: loadingVideos } = useQuery({
-    queryKey: ['userVideos', profileData?._id || profileData?.id],
+  const { data: userVideos, isLoading: loadingVideos, refetch: refetchVideos } = useQuery({
+    queryKey: ['userVideos', profileData?._id || profileData?.id, isOwnProfile],
     queryFn: async () => {
       if (!profileData?._id && !profileData?.id) return [];
       
@@ -148,24 +186,33 @@ export function ProfilePage() {
       console.log('Fetching videos for user ID:', userId);
       
       try {
+        // Get auth token from localStorage for debugging
+        const token = localStorage.getItem('token')
+        const userJson = localStorage.getItem('user')
+        const currentUser = userJson ? JSON.parse(userJson) : null
+        
+        console.log('Auth check for video fetch:', {
+          hasToken: !!token,
+          currentUserId: currentUser?.id,
+          profileUserId: userId,
+          isOwnProfile
+        });
+        
+        // Fetch all videos for this user
         const videos = await VideoService.getUserVideos(userId);
         console.log('Fetched videos:', videos);
         
-        // Ensure we're only returning videos that belong to this user
-        // This is a safety check in case the server doesn't filter properly
-        const filteredVideos = videos.filter(video => {
-          // Handle different possible structures of userId
-          if (typeof video.userId === 'string') {
-            return video.userId === userId;
-          } else if (video.userId && typeof video.userId === 'object') {
-            // Check if userId is an object with _id property
-            return video.userId._id === userId;
-          }
-          return false;
+        // No need to filter videos here - the server should handle this based on the includePrivate parameter
+        // Just return all videos that were returned by the server
+        
+        console.log('Videos for user:', {
+          total: videos.length,
+          public: videos.filter(v => v.visibility === 'public' || !v.visibility).length,
+          private: videos.filter(v => v.visibility === 'private').length,
+          unlisted: videos.filter(v => v.visibility === 'unlisted').length
         });
         
-        console.log('Filtered videos for user:', filteredVideos.length);
-        return filteredVideos;
+        return videos;
       } catch (error) {
         console.error('Error fetching user videos:', error);
         return [];
@@ -173,6 +220,13 @@ export function ProfilePage() {
     },
     enabled: !!(profileData?._id || profileData?.id),
   });
+
+  // Refetch videos when isOwnProfile changes
+  useEffect(() => {
+    if (profileData) {
+      refetchVideos();
+    }
+  }, [isOwnProfile, profileData, refetchVideos]);
 
   const displayData = isOwnProfile ? user : profileData
 
@@ -305,9 +359,33 @@ export function ProfilePage() {
 
         {/* Tabs for Content */}
         <div className="w-full">
-          <h2 className="text-xl font-semibold mb-4">
-            {isOwnProfile ? "Your Videos" : `${displayData?.username}'s Videos`}
-          </h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+            <h2 className="text-xl font-semibold">
+              {isOwnProfile ? "Your Videos" : `${displayData?.username}'s Videos`}
+            </h2>
+            
+            {/* Show visibility counts for own profile */}
+            {isOwnProfile && userVideos && userVideos.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
+                {userVideos.filter(v => v.visibility === 'private').length > 0 && (
+                  <div className="flex items-center text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
+                    <Lock className="h-3 w-3 mr-1" />
+                    <span>{userVideos.filter(v => v.visibility === 'private').length} Private</span>
+                  </div>
+                )}
+                {userVideos.filter(v => v.visibility === 'unlisted').length > 0 && (
+                  <div className="flex items-center text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    <span>{userVideos.filter(v => v.visibility === 'unlisted').length} Unlisted</span>
+                  </div>
+                )}
+                <div className="flex items-center text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                  <Eye className="h-3 w-3 mr-1" />
+                  <span>{userVideos.filter(v => v.visibility === 'public' || !v.visibility).length} Public</span>
+                </div>
+              </div>
+            )}
+          </div>
           
           {/* Videos Content */}
           <div className="space-y-4">
@@ -320,10 +398,18 @@ export function ProfilePage() {
                 {userVideos.map((video) => {
                   // Ensure we have a valid ID for the video
                   const videoId = video.id || video._id;
+                  
+                  // Skip videos without an ID
+                  if (!videoId) return null;
+                  
+                  // Determine if video is private or unlisted
+                  const isPrivate = video.visibility === 'private';
+                  const isUnlisted = video.visibility === 'unlisted';
+                  
                   return (
                     <Card 
                       key={videoId} 
-                      className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow" 
+                      className={`overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${isPrivate ? 'border-red-300' : isUnlisted ? 'border-yellow-300' : ''}`}
                       onClick={() => navigate(`/video/${videoId}`)}
                     >
                       <div className="aspect-video relative">
@@ -331,16 +417,43 @@ export function ProfilePage() {
                           <img 
                             src={video.thumbnailUrl} 
                             alt={video.title} 
-                            className="w-full h-full object-cover"
+                            className={`w-full h-full object-cover ${isPrivate ? 'opacity-80' : ''}`}
                           />
                         ) : (
                           <div className="w-full h-full bg-muted flex items-center justify-center">
                             <Video className="h-10 w-10 text-muted-foreground" />
                           </div>
                         )}
+                        
+                        {/* Visibility indicators */}
+                        {isPrivate && (
+                          <div className="absolute top-2 right-2 bg-red-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
+                            <Lock className="h-3 w-3 mr-1" />
+                            <span>Private</span>
+                          </div>
+                        )}
+                        
+                        {isUnlisted && (
+                          <div className="absolute top-2 right-2 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
+                            <EyeOff className="h-3 w-3 mr-1" />
+                            <span>Unlisted</span>
+                          </div>
+                        )}
+                        
+                        {/* Duration badge if available */}
+                        {video.duration && (
+                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
+                            {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                          </div>
+                        )}
                       </div>
                       <CardContent className="p-3">
-                        <h3 className="font-medium line-clamp-1">{video.title}</h3>
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-medium line-clamp-1 flex-1">{video.title}</h3>
+                          {/* Small visibility icon for quick identification */}
+                          {isPrivate && <Lock className="h-3.5 w-3.5 text-red-500 ml-1 flex-shrink-0" />}
+                          {isUnlisted && <EyeOff className="h-3.5 w-3.5 text-yellow-500 ml-1 flex-shrink-0" />}
+                        </div>
                         <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Users className="h-3 w-3" /> {video.views || 0}

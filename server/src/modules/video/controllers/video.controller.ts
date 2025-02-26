@@ -222,14 +222,46 @@ export class VideoController {
 
   getVideos = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { userId: queryUserId } = req.query;
+      const { userId: queryUserId, includePrivate } = req.query;
       const currentUserId = (req as AuthRequest).user?.id;
+      
+      // Debug authentication
+      console.log('Get videos request headers:', {
+        hasAuthHeader: !!req.headers.authorization,
+        authHeaderStart: req.headers.authorization ? req.headers.authorization.substring(0, 15) + '...' : 'none',
+        authHeaderLength: req.headers.authorization ? req.headers.authorization.length : 0
+      });
+      
+      // If we have an auth header but no user, try to manually decode the token
+      if (req.headers.authorization && !currentUserId) {
+        console.log('WARNING: Authorization header exists but user is undefined. Trying to decode token...');
+        try {
+          const token = req.headers.authorization.split(' ')[1];
+          const decoded = jwt.decode(token);
+          console.log('Manual token decode result:', decoded);
+          
+          if (decoded && typeof decoded === 'object' && decoded.id) {
+            console.log('Setting user from decoded token:', decoded.id);
+            (req as AuthRequest).user = {
+              id: decoded.id,
+              email: decoded.email || '',
+              username: decoded.username || ''
+            };
+          }
+        } catch (tokenError) {
+          console.error('Error decoding token:', tokenError);
+        }
+      }
+      
+      // Get the user ID after potential token decoding
+      const effectiveUserId = (req as AuthRequest).user?.id;
       
       console.log('Get videos request:', {
         queryUserId: queryUserId || 'none',
-        currentUserId: currentUserId || 'not authenticated',
+        currentUserId: effectiveUserId || 'not authenticated',
+        includePrivate: includePrivate === 'true',
         isProfileView: !!queryUserId,
-        isOwnProfile: queryUserId === currentUserId
+        isOwnProfile: queryUserId === effectiveUserId
       });
       
       // Create filter object based on query parameters
@@ -241,7 +273,8 @@ export class VideoController {
       }
       
       // Handle visibility restrictions
-      if (queryUserId && queryUserId === currentUserId) {
+      if ((queryUserId && queryUserId === effectiveUserId) || 
+          (includePrivate === 'true' && queryUserId === effectiveUserId)) {
         // User can see all their own videos
         console.log('User viewing their own profile - showing all videos');
       } else if (queryUserId) {
@@ -260,7 +293,12 @@ export class VideoController {
         .populate('userId', 'username profilePicture')
         .sort({ createdAt: -1 });
       
-      console.log(`Returning ${videos.length} videos`);
+      console.log(`Returning ${videos.length} videos with visibilities:`, {
+        public: videos.filter(v => v.visibility === 'public' || !v.visibility).length,
+        private: videos.filter(v => v.visibility === 'private').length,
+        unlisted: videos.filter(v => v.visibility === 'unlisted').length
+      });
+      
       res.json(videos);
     } catch (error) {
       console.error('Get videos error:', error);

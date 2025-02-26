@@ -393,16 +393,72 @@ export const VideoService = {
   async getUserVideos(userId: string): Promise<Video[]> {
     try {
       if (!userId) {
+        console.error('getUserVideos called with empty userId');
         return [];
       }
       
+      // Get auth token from localStorage for debugging
+      const token = localStorage.getItem('token')
+      const userJson = localStorage.getItem('user')
+      const currentUser = userJson ? JSON.parse(userJson) : null
+      
+      // Check if the current user is the owner of the profile
+      const isOwner = currentUser && (currentUser.id === userId || currentUser._id === userId);
+      
+      console.log('Fetching videos for user:', {
+        userId,
+        hasToken: !!token,
+        currentUserId: currentUser?.id || 'not logged in',
+        tokenFirstChars: token ? token.substring(0, 10) + '...' : 'no token',
+        isOwner
+      });
+      
+      // Ensure we have proper headers with the auth token
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        console.log('Using authorization header:', {
+          headerLength: headers.Authorization.length,
+          headerStart: headers.Authorization.substring(0, 15) + '...'
+        });
+      }
+      
       // Use server-side filtering by passing userId as a query parameter
+      // Include includePrivate=true when the current user is the owner
       const { data } = await api.get<VideoResponse>('/videos', {
-        params: { userId }
+        params: { 
+          userId,
+          includePrivate: isOwner // This tells the server to include private/unlisted videos
+        },
+        headers // Explicitly pass headers to ensure authentication
+      });
+      
+      // Handle different response formats
+      let videos: Video[] = [];
+      if (Array.isArray(data)) {
+        videos = data;
+      } else if (data && typeof data === 'object') {
+        if (Array.isArray(data.data)) {
+          videos = data.data;
+        }
+      }
+      
+      // Log detailed information about the videos
+      console.log('Received videos response:', {
+        responseType: typeof data,
+        isArray: Array.isArray(data),
+        hasDataProperty: data && typeof data === 'object' && 'data' in data,
+        videoCount: videos.length,
+        firstVideoId: videos.length > 0 ? (videos[0].id || videos[0]._id) : 'none',
+        visibilityCounts: {
+          public: videos.filter(v => v.visibility === 'public' || !v.visibility).length,
+          private: videos.filter(v => v.visibility === 'private').length,
+          unlisted: videos.filter(v => v.visibility === 'unlisted').length
+        }
       });
       
       // Return the videos array
-      return Array.isArray(data) ? data : data.data || [];
+      return videos;
     } catch (error) {
       console.error('Error fetching user videos:', error);
       throw error;
