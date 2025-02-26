@@ -23,8 +23,8 @@ services:
       - public_data:/usr/src/app/server/public
     environment:
       - PORT=3000
-      - MONGODB_URI=mongodb+srv://rdacles08:18DFLI1viyYBHPg3@tiknok.3taqw.mongodb.net/?retryWrites=true&w=majority&appName=Tiknok
-      - JWT_SECRET=your-secret-key-here
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGIN=http://localhost:5173
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -33,6 +33,8 @@ services:
       - redis
     networks:
       - app_network
+    env_file:
+      - ./server/.env
 
   client:
     build:

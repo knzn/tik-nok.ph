@@ -1,4 +1,4 @@
-import express from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
@@ -14,16 +14,22 @@ import morgan from 'morgan'
 import { apiLimiter, authLimiter, uploadLimiter, videoLimiter } from './middleware/rate-limit'
 import { corsMiddleware } from './middleware/cors.middleware'
 import { QueueService } from './services/queue.service'
+import { errorHandler, notFoundHandler } from './middleware/error.middleware'
 
 const app = express()
 
-// Global error handler
+// Global error handler for uncaught exceptions
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error)
+  console.error('[FATAL] Uncaught Exception:', error)
+  // Give time for logs to be written before exiting
+  setTimeout(() => {
+    process.exit(1)
+  }, 1000)
 })
 
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled Rejection:', error)
+// Global error handler for unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Promise Rejection:', reason)
 })
 
 // Initialize video processing service
@@ -33,35 +39,37 @@ VideoProcessingService.init().catch(console.error)
 QueueService.init()
 
 // Middleware
-app.use(corsMiddleware)
-app.use(helmet({
-  crossOriginResourcePolicy: false // Allow serving uploaded files
-}))
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use(corsMiddleware)
+app.use(helmet())
 app.use(morgan('dev'))
 
 // Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Increased from 300 to 500 requests per 15 minutes
-  message: 'Too many requests from this IP, please try again later',
-  standardHeaders: true,
-  legacyHeaders: false
-})
-app.use(limiter)
+app.use('/api/', apiLimiter)
+app.use('/api/auth', authLimiter)
+app.use('/api/videos', videoLimiter)
+app.use('/api/videos/upload', uploadLimiter)
 
-// Ensure upload directories exist
-const uploadDirs = ['uploads', 'uploads/temp', 'uploads/profiles'].map(dir => 
-  path.join(__dirname, '..', dir)
-)
-uploadDirs.forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
-})
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, '../uploads')
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true })
+}
 
-// Static files
+const tempUploadsDir = path.join(__dirname, '../uploads/temp')
+if (!fs.existsSync(tempUploadsDir)) {
+  fs.mkdirSync(tempUploadsDir, { recursive: true })
+}
+
+const profilesDir = path.join(__dirname, '../uploads/profiles')
+if (!fs.existsSync(profilesDir)) {
+  fs.mkdirSync(profilesDir, { recursive: true })
+}
+
+// Serve static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
+app.use('/public', express.static(path.join(__dirname, '../public')))
 
 // Serve HLS files with correct MIME type and bypass rate limiting
 app.use('/hls', (req, res, next) => {
@@ -79,19 +87,29 @@ app.use('/hls', (req, res, next) => {
 app.use('/hls', express.static(path.join(__dirname, '../public/hls')))
 app.use('/thumbnails', express.static(path.join(__dirname, '../public/thumbnails')))
 
-// Apply rate limiting to API routes
-app.use('/api/auth', authLimiter, authRoutes)
-app.use('/api/videos', videoLimiter, videoRoutes)
-app.use('/api/users', apiLimiter, userRoutes)
+// API routes
+app.use('/api/auth', authRoutes)
+app.use('/api/videos', videoRoutes)
+app.use('/api/users', userRoutes)
 
-// Apply general rate limiting to all other API routes
-app.use('/api', apiLimiter)
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' })
+})
+
+// API documentation
+app.get('/api/docs', (req, res) => {
+  res.status(200).json({
+    message: 'API documentation coming soon',
+    version: '1.0.0'
+  })
+})
+
+// 404 handler
+app.use(notFoundHandler)
 
 // Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err)
-  res.status(500).json({ error: 'Internal server error' })
-})
+app.use(errorHandler)
 
 // Database connection
 connectDatabase()
