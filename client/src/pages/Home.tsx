@@ -1,18 +1,15 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { VideoService } from '../services/video.service';
-import { VideoCard } from '../components/features/Video/VideoCard';
+import { Link } from 'react-router-dom';
+import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { formatTimeAgo } from '../utils/formatTimeAgo';
+import { formatViewCount } from '../utils/formatViewCount';
 
-
-const VIDEOS_PER_PAGE = 5;
-const MIN_SWIPE_DISTANCE = 50;
+const VIDEOS_PER_PAGE = 12;
 
 export function Home() {
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const touchStartY = useRef(0);
-
   // Query for videos with pagination
   const {
     data,
@@ -28,58 +25,35 @@ export function Home() {
       lastPage.nextPage ? lastPage.nextPage : undefined,
     initialPageParam: 1
   });
+
   // Flatten video data from all pages
   const videos = data?.pages.flatMap(page => page.data) || [];
 
-  // Touch handlers for swipe navigation
-  const handleTouchStart = useCallback((e: React.TouchEvent | TouchEvent) => {
-    touchStartY.current = 'touches' in e ? e.touches[0].clientY : (e as TouchEvent).touches[0].clientY;
-  }, []);
+  // Load more videos when scrolling to the bottom
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useCallback((node: HTMLDivElement | null) => {
+    if (isFetchingNextPage) return;
+    
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent | TouchEvent) => {
-    const touchEndY = 'changedTouches' in e 
-      ? e.changedTouches[0].clientY 
-      : (e as TouchEvent).changedTouches[0].clientY;
-    const deltaY = touchStartY.current - touchEndY;
-
-    if (Math.abs(deltaY) > MIN_SWIPE_DISTANCE) {
-      if (deltaY > 0 && currentVideoIndex < videos.length - 1) {
-        // Swipe up - next video
-        setCurrentVideoIndex(prev => prev + 1);
-      } else if (deltaY < 0 && currentVideoIndex > 0) {
-        // Swipe down - previous video
-        setCurrentVideoIndex(prev => prev - 1);
+    observerRef.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasNextPage) {
+        fetchNextPage();
       }
+    });
+
+    if (node) {
+      observerRef.current.observe(node);
     }
-  }, [currentVideoIndex, videos.length]);
-
-  // Set up touch event listeners
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Use correct event types for DOM listeners
-    container.addEventListener('touchstart', handleTouchStart as unknown as EventListener);
-    container.addEventListener('touchend', handleTouchEnd as unknown as EventListener);
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart as unknown as EventListener);
-      container.removeEventListener('touchend', handleTouchEnd as unknown as EventListener);
-    };
-  }, [handleTouchStart, handleTouchEnd]);
-
-  // Load more videos when approaching the end
-  useEffect(() => {
-    if (currentVideoIndex >= videos.length - 2 && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
-    }
-  }, [currentVideoIndex, videos.length, hasNextPage, fetchNextPage, isFetchingNextPage]);
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   // Render loading state
   if (status === 'pending') {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-4rem)]">
-        <LoadingSpinner />
+        <LoadingSpinner size={32} />
       </div>
     );
   }
@@ -103,31 +77,97 @@ export function Home() {
   }
 
   return (
-    <div 
-      ref={containerRef}
-      className="h-[calc(100vh-4rem)] overflow-hidden touch-none"
-    >
-      <div 
-        className="h-full transition-transform duration-300 ease-out"
-        style={{ transform: `translateY(-${currentVideoIndex * 100}%)` }}
-      >
-        {videos.map((video, index) => (
-          <div 
-            key={video.id} 
-            className="h-full snap-center"
-          >
-            <VideoCard 
-              video={video} 
-              isActive={currentVideoIndex === index}
-            />
-            {isFetchingNextPage && index === videos.length - 1 && (
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                <LoadingSpinner size="sm" />
+    <div className="w-full px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 px-2">Recommended Videos</h1>
+      
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-2 gap-y-6 sm:gap-x-4 sm:gap-y-8 md:gap-6">
+        {videos.map((video) => {
+          // Get video ID safely
+          const videoId = video.id || video._id || '';
+          
+          // Get username safely with fallback
+          const username = video.userId?.username || 'Unknown User';
+          // ProfilePicture might not exist in the type, so handle it safely
+          const profilePicture = 'profilePicture' in video.userId 
+            ? (video.userId as any).profilePicture 
+            : undefined;
+          const firstLetter = username.charAt(0).toUpperCase();
+          
+          // Format time ago from createdAt
+          const timeAgo = formatTimeAgo(video.createdAt);
+          
+          // Format view count
+          const viewCount = formatViewCount(video.views || 0);
+          
+          return (
+            <div key={videoId} className="video-card flex flex-col">
+              {/* Video Thumbnail */}
+              <Link to={`/video/${videoId}`} className="relative aspect-video overflow-hidden rounded-lg group">
+                <img 
+                  src={video.thumbnailUrl || '/placeholder-thumbnail.jpg'} 
+                  alt={video.title}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                />
+                {video.duration && (
+                  <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-medium">
+                    {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                  </div>
+                )}
+              </Link>
+              
+              {/* Video Info */}
+              <div className="flex mt-2 sm:mt-3 space-x-2 sm:space-x-3">
+                {/* User Avatar */}
+                <Link to={`/profile/${username}`} className="flex-shrink-0 mt-0.5">
+                  <Avatar className="h-8 w-8 sm:h-9 sm:w-9 rounded-full">
+                    <AvatarImage 
+                      src={profilePicture} 
+                      alt={username} 
+                    />
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {firstLetter}
+                    </AvatarFallback>
+                  </Avatar>
+                </Link>
+                
+                {/* Title and Meta */}
+                <div className="flex-1 min-w-0">
+                  <Link to={`/video/${videoId}`} className="block">
+                    <h3 className="text-sm sm:text-base font-medium line-clamp-2 hover:text-blue-600 leading-tight">
+                      {video.title}
+                    </h3>
+                  </Link>
+                  
+                  <Link to={`/profile/${username}`} className="block mt-1 sm:mt-1.5 text-xs sm:text-sm text-gray-500 hover:text-gray-700">
+                    {username}
+                  </Link>
+                  
+                  <div className="flex items-center text-xs sm:text-sm text-gray-500 mt-0.5">
+                    <span>{viewCount}</span>
+                    <span className="mx-1">•</span>
+                    <span>{timeAgo}</span>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
+      
+      {/* Loading indicator for infinite scroll */}
+      {hasNextPage && (
+        <div 
+          ref={loadMoreRef} 
+          className="flex justify-center items-center py-8 sm:py-10"
+        >
+          {isFetchingNextPage ? (
+            <LoadingSpinner size={24} />
+          ) : (
+            <div className="h-10" />
+          )}
+        </div>
+      )}
     </div>
   );
 }

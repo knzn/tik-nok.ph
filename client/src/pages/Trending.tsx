@@ -7,7 +7,7 @@ import { VideoCard } from '../components/features/Video/VideoCard'
 import { Button } from '../components/ui/button'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 
-const SCROLL_DISTANCE = 400
+const SCROLL_DISTANCE = 300
 
 interface CategoryProps {
   title: string
@@ -32,7 +32,7 @@ const VideoCategory = ({ title, type }: CategoryProps) => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-10">
+      <div className="flex justify-center py-6 sm:py-10">
         <LoadingSpinner />
       </div>
     )
@@ -44,46 +44,51 @@ const VideoCategory = ({ title, type }: CategoryProps) => {
 
   return (
     <div className="relative">
-      <h2 className="text-2xl font-bold mb-4">{title}</h2>
+      <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4">{title}</h2>
       
       <div className="group relative">
         {/* Left scroll button */}
         <Button
           variant="outline"
           size="icon"
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex"
           onClick={() => scroll('left')}
         >
-          <ChevronLeft className="h-6 w-6" />
+          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
         </Button>
 
         {/* Videos container */}
         <div
           ref={scrollContainerRef}
-          className="flex overflow-x-auto scrollbar-hide gap-4 pb-4"
+          className="flex overflow-x-auto scrollbar-hide gap-3 sm:gap-4 pb-4 px-1 sm:px-0"
           style={{ scrollSnapType: 'x mandatory' }}
         >
-          {videos.map((video) => (
-            <motion.div
-              key={video.id}
-              className="flex-none w-[300px]"
-              style={{ scrollSnapAlign: 'start' }}
-              whileHover={{ scale: 1.05 }}
-              transition={{ duration: 0.2 }}
-            >
-              <VideoCard video={video} />
-            </motion.div>
-          ))}
+          {videos.map((video) => {
+            // Get a safe video ID
+            const videoId = video.id || video._id || '';
+            
+            return (
+              <motion.div
+                key={videoId}
+                className="flex-none w-[220px] xs:w-[250px] sm:w-[280px] md:w-[300px]"
+                style={{ scrollSnapAlign: 'start' }}
+                whileHover={{ scale: 1.03 }}
+                transition={{ duration: 0.2 }}
+              >
+                <VideoCard video={video as any} />
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* Right scroll button */}
         <Button
           variant="outline"
           size="icon"
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex"
           onClick={() => scroll('right')}
         >
-          <ChevronRight className="h-6 w-6" />
+          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
         </Button>
       </div>
     </div>
@@ -92,8 +97,8 @@ const VideoCategory = ({ title, type }: CategoryProps) => {
 
 export default function Trending() {
   return (
-    <div className="container py-8 space-y-12">
-      <h1 className="text-4xl font-bold mb-8">Trending</h1>
+    <div className="w-full max-w-[2000px] mx-auto py-4 px-3 sm:py-6 sm:px-4 md:px-6 space-y-8 sm:space-y-10 md:space-y-12">
+      <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-6 sm:mb-8">Trending</h1>
       
       <VideoCategory 
         title="Most Liked Videos" 

@@ -132,11 +132,11 @@ export function ProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Profile Info Section - Centered with max-width */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-4 sm:pt-6 md:pt-8">
         {/* Centered Profile Picture with Update Button */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6 sm:mb-8">
           <div className="relative">
-            <div className="w-48 h-48 rounded-full border-4 border-background bg-gray-200 overflow-hidden mb-4">
+            <div className="w-28 h-28 sm:w-36 sm:h-36 md:w-48 md:h-48 rounded-full border-4 border-background bg-gray-200 overflow-hidden mb-3 sm:mb-4">
               {displayData?.profilePicture ? (
                 <img
                   src={displayData.profilePicture}
@@ -151,7 +151,7 @@ export function ProfilePage() {
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-6xl">👤</span>
+                  <span className="text-3xl sm:text-4xl md:text-6xl">👤</span>
                 </div>
               )}
             </div>
@@ -159,10 +159,10 @@ export function ProfilePage() {
               <Button
                 variant="outline"
                 size="icon"
-                className="absolute bottom-6 right-0 rounded-full"
+                className="absolute bottom-4 sm:bottom-6 right-0 rounded-full w-8 h-8 sm:w-10 sm:h-10"
                 onClick={() => setShowProfilePictureModal(true)}
               >
-                <Camera className="h-4 w-4" />
+                <Camera className="h-3 w-3 sm:h-4 sm:w-4" />
               </Button>
             )}
           </div>
@@ -171,7 +171,8 @@ export function ProfilePage() {
           {isOwnProfile && (
             <Button
               variant="outline"
-              size="lg"
+              size="sm"
+              className="mt-2 sm:mt-3 text-xs sm:text-sm"
               onClick={() => setShowEditModal(true)}
             >
               Edit Profile
@@ -181,9 +182,9 @@ export function ProfilePage() {
           {!isOwnProfile && user && (
             <Button
               variant={isFollowing ? "outline" : "default"}
-              size="lg"
+              size="sm"
+              className="mt-2 sm:mt-3 text-xs sm:text-sm"
               onClick={isFollowing ? handleUnfollow : handleFollow}
-              className="mt-4"
             >
               {isFollowing ? "Unfollow" : "Follow"}
             </Button>
@@ -191,25 +192,25 @@ export function ProfilePage() {
         </div>
 
         {/* Profile Details Card */}
-        <div className="bg-card rounded-xl p-8 shadow-lg">
-          <div className="space-y-8">
+        <div className="bg-card rounded-xl p-4 sm:p-6 md:p-8 shadow-lg">
+          <div className="space-y-6 sm:space-y-8">
             <div className="text-center">
-              <h1 className="text-3xl font-bold">{displayData?.gamefarmName || "Gamefarm"}</h1>
-              <p className="text-lg text-muted-foreground mt-2">@{displayData?.username}</p>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">{displayData?.gamefarmName || "Gamefarm"}</h1>
+              <p className="text-base sm:text-lg text-muted-foreground mt-1 sm:mt-2">@{displayData?.username}</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
               <div>
-                <h2 className="text-xl font-semibold">Location</h2>
-                <p className="text-muted-foreground mt-2">{displayData?.address || "Not specified"}</p>
+                <h2 className="text-lg sm:text-xl font-semibold">Location</h2>
+                <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">{displayData?.address || "Not specified"}</p>
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Contact</h2>
-                <p className="text-muted-foreground mt-2">{displayData?.contactNumber || "Not specified"}</p>
+                <h2 className="text-lg sm:text-xl font-semibold">Contact</h2>
+                <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">{displayData?.contactNumber || "Not specified"}</p>
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Facebook</h2>
-                <p className="text-muted-foreground mt-2">
+                <h2 className="text-lg sm:text-xl font-semibold">Facebook</h2>
+                <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
                   {displayData?.facebookProfile ? (
                     <a href={displayData.facebookProfile} target="_blank" rel="noopener noreferrer" 
                        className="text-primary hover:underline">
@@ -223,18 +224,18 @@ export function ProfilePage() {
             </div>
 
             {/* Stats */}
-            <div className="flex justify-center gap-12 pt-6 border-t">
+            <div className="flex justify-center gap-6 sm:gap-8 md:gap-12 pt-4 sm:pt-6 border-t">
               <div>
-                <span className="text-2xl font-bold">{followersCount}</span>
-                <span className="text-muted-foreground ml-2">followers</span>
+                <span className="text-xl sm:text-2xl font-bold">{followersCount}</span>
+                <span className="text-sm sm:text-base text-muted-foreground ml-1 sm:ml-2">followers</span>
               </div>
               <div>
-                <span className="text-2xl font-bold">{followingCount}</span>
-                <span className="text-muted-foreground ml-2">following</span>
+                <span className="text-xl sm:text-2xl font-bold">{followingCount}</span>
+                <span className="text-sm sm:text-base text-muted-foreground ml-1 sm:ml-2">following</span>
               </div>
               <div>
-                <span className="text-2xl font-bold">37K</span>
-                <span className="text-muted-foreground ml-2">likes</span>
+                <span className="text-xl sm:text-2xl font-bold">37K</span>
+                <span className="text-sm sm:text-base text-muted-foreground ml-1 sm:ml-2">likes</span>
               </div>
             </div>
           </div>

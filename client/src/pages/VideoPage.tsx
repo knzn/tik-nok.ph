@@ -3,13 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { VideoService } from '../services/video.service'
 import { VideoPlayer } from '../components/features/Video/VideoPlayer'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
-import { Button } from '@/components/ui/button'
-import { Avatar } from '@/components/ui/avatar'
-import { Separator } from '@/components/ui/separator'
+import { Button } from '../components/ui/button'
+import { Avatar } from '../components/ui/avatar'
+import { Separator } from '../components/ui/separator'
 import { ThumbsUp, ThumbsDown, Share2, MoreVertical } from 'lucide-react'
-import type { Video } from '@/types/video.types'
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Card } from "@/components/ui/card"
+import type { Video } from '../types/video.types'
+import { ScrollArea } from "../components/ui/scroll-area"
+import { Card } from "../components/ui/card"
 import { VideoDetail } from '../components/features/Video/VideoDetail'
 
 export const VideoPage = () => {
@@ -30,7 +30,7 @@ export const VideoPage = () => {
         const data = await VideoService.getVideo(id!)
         
         if (mounted && data) {
-          setVideo(data)
+          setVideo(data as unknown as Video)
           if (data.aspectRatio === 0.5625) {
             navigate(`/shorts/${id}`)
           }
@@ -61,7 +61,7 @@ export const VideoPage = () => {
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
-        <LoadingSpinner />
+        <LoadingSpinner size={32} />
       </div>
     )
   }
@@ -74,14 +74,16 @@ export const VideoPage = () => {
     )
   }
 
-  if (video.status === 'processing') {
+  const isProcessing = video.status === 'processing' || video.status === 'processing' as any;
+
+  if (isProcessing) {
     return (
-      <div className="w-full h-screen flex items-center justify-center">
-        <div className="w-full max-w-4xl mx-4 bg-blue-50 p-4 rounded-lg">
-          <h2 className="text-xl font-semibold mb-2">{video.title}</h2>
+      <div className="w-full h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl mx-auto bg-blue-50 p-4 rounded-lg">
+          <h2 className="text-lg sm:text-xl font-semibold mb-2">{video.title}</h2>
           <div className="flex items-center space-x-2">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-            <p className="text-blue-600">Processing video... This may take a few minutes.</p>
+            <p className="text-blue-600 text-sm sm:text-base">Processing video... This may take a few minutes.</p>
           </div>
         </div>
       </div>
@@ -107,24 +109,24 @@ export const VideoPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="flex flex-col lg:flex-row max-w-[1920px] mx-auto">
+      <div className="flex flex-col lg:flex-row max-w-[2000px] mx-auto">
         {/* Main Content */}
         <div className="flex-grow lg:w-[65%] xl:w-[70%]">
           <div className="w-full bg-black">
             {loading ? (
               <div className="w-full aspect-video flex items-center justify-center">
-                <LoadingSpinner />
+                <LoadingSpinner size={32} />
               </div>
             ) : error ? (
               <div className="w-full aspect-video flex items-center justify-center">
-                <div className="text-red-500">{error}</div>
+                <div className="text-red-500 text-sm sm:text-base">{error}</div>
               </div>
-            ) : video?.status === 'processing' ? (
-              <div className="w-full aspect-video flex items-center justify-center bg-secondary/10">
+            ) : isProcessing ? (
+              <div className="w-full aspect-video flex items-center justify-center bg-secondary/10 p-4">
                 <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <h2 className="text-xl font-semibold mb-2">{video.title}</h2>
-                  <p className="text-muted-foreground">Processing video... This may take a few minutes.</p>
+                  <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-primary mx-auto mb-3 sm:mb-4"></div>
+                  <h2 className="text-base sm:text-xl font-semibold mb-1 sm:mb-2">{video.title}</h2>
+                  <p className="text-muted-foreground text-sm sm:text-base">Processing video... This may take a few minutes.</p>
                 </div>
               </div>
             ) : (
@@ -139,23 +141,26 @@ export const VideoPage = () => {
             )}
           </div>
 
-          {video && !error && video.status !== 'processing' && (
-            <VideoDetail videoId={video.id} />
+          {video && !error && !isProcessing && (
+            <div className="px-3 sm:px-4 md:px-6">
+              <VideoDetail videoId={video.id} />
+            </div>
           )}
         </div>
 
         {/* Suggested Videos Sidebar */}
-        <div className="lg:w-[35%] xl:w-[30%] p-4">
-          <ScrollArea className="h-[calc(100vh-80px)]">
-            <div className="space-y-4">
+        <div className="lg:w-[35%] xl:w-[30%] p-3 sm:p-4">
+          <h3 className="text-base sm:text-lg font-medium mb-3 sm:mb-4 px-1">Suggested Videos</h3>
+          <ScrollArea className="h-[calc(100vh-120px)] sm:h-[calc(100vh-130px)]">
+            <div className="space-y-3 sm:space-y-4 pr-2">
               {/* Add your suggested videos here */}
               {/* Example placeholder cards */}
               {Array.from({ length: 10 }).map((_, i) => (
                 <Card key={i} className="flex gap-2 p-2 hover:bg-accent cursor-pointer">
-                  <div className="w-40 aspect-video bg-secondary rounded-sm" />
+                  <div className="w-32 sm:w-40 aspect-video bg-secondary rounded-sm" />
                   <div className="flex-1">
-                    <h3 className="font-medium line-clamp-2">Suggested Video Title</h3>
-                    <p className="text-sm text-muted-foreground">Channel Name</p>
+                    <h3 className="text-sm sm:text-base font-medium line-clamp-2">Suggested Video Title</h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Channel Name</p>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <span>123K views</span>
                       <span>•</span>

@@ -1,9 +1,9 @@
-import { LoginForm } from '@/components/auth/LoginForm'
+import { LoginForm } from '../components/auth/LoginForm'
 
 export function LoginPage() {
   return (
-    <div className="w-full max-w-lg mx-auto py-10 px-6">
-      <h1 className="text-2xl font-bold mb-6 text-center">Login</h1>
+    <div className="w-full max-w-sm sm:max-w-md md:max-w-lg mx-auto py-6 px-4 sm:py-10 sm:px-6">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-center">Login</h1>
       <LoginForm />
     </div>
   )
