@@ -22,7 +22,9 @@ export const VideoSchema = z.object({
   status: z.enum(['processing', 'public', 'private']).default('processing'),
   quality: z.array(z.string()),
   createdAt: z.date(),
-  updatedAt: z.date()
+  updatedAt: z.date(),
+  tags: z.array(z.string()).optional(),
+  videoType: z.string().optional()
 })
 
 export type VideoSchemaType = z.infer<typeof VideoSchema>
@@ -57,4 +59,6 @@ export interface Video {
   quality: string[]
   createdAt: Date
   updatedAt: Date
+  tags?: string[]
+  videoType?: string
 } 

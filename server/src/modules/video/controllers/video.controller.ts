@@ -66,12 +66,29 @@ export class VideoController {
         return
       }
 
+      // Parse tags if they exist
+      let tags: string[] = [];
+      if (req.body.tags) {
+        try {
+          tags = JSON.parse(req.body.tags);
+        } catch (e) {
+          console.error('Error parsing tags:', e);
+          // If parsing fails, try to handle as comma-separated string
+          if (typeof req.body.tags === 'string') {
+            tags = req.body.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean);
+          }
+        }
+      }
+
       const video = await VideoModel.create({
         title: req.body.title,
         description: req.body.description,
         userId: req.user.id,
         status: 'processing',
-        visibility: req.body.visibility || 'public'
+        visibility: req.body.visibility || 'public',
+        tags: tags,
+        videoType: req.body.videoType || '',
+        duration: req.body.duration ? parseFloat(req.body.duration) : 0
       })
 
       // Start processing in background

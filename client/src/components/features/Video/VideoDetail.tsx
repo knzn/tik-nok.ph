@@ -2,16 +2,16 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
 import { Pencil, Trash2, ThumbsUp, ThumbsDown, MoreVertical, Users, Bell, MessageSquare } from 'lucide-react'
-import { VideoService } from '@/services/video.service'
+import { VideoService } from '../../../services/video.service'
 import { VideoPlayer } from './VideoPlayer'
 import { CommentSection } from '../Comment/CommentSection'
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { ErrorMessage } from '@/components/ui/ErrorMessage'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { useToast } from '@/components/ui/use-toast'
-import { useAuthStore } from '@/stores/authStore'
+import { LoadingSpinner } from '../../../components/ui/LoadingSpinner'
+import { ErrorMessage } from '../../../components/ui/ErrorMessage'
+import { Button } from '../../../components/ui/button'
+import { Input } from '../../../components/ui/input'
+import { Textarea } from '../../../components/ui/textarea'
+import { useToast } from '../../../components/ui/use-toast'
+import { useAuthStore } from '../../../stores/authStore'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,18 +21,45 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "../../../components/ui/alert-dialog"
 import type { Video } from '@video-app/shared/types/video.types'
 import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Separator } from "@/components/ui/separator"
-import { cn } from "@/lib/utils"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { followUser, unfollowUser, checkFollowStatus } from '@/lib/api'
+} from "../../../components/ui/dropdown-menu"
+import { Separator } from "../../../components/ui/separator"
+import { cn } from "../../../lib/utils"
+import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
+import { followUser, unfollowUser, checkFollowStatus } from '../../../lib/api'
+
+// Helper function to format time ago
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+  
+  if (seconds < 60) {
+    return 'just now';
+  } else if (minutes < 60) {
+    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  } else if (hours < 24) {
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  } else if (days < 30) {
+    return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+  } else if (months < 12) {
+    return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+  } else {
+    return `${years} ${years === 1 ? 'year' : 'years'} ago`;
+  }
+}
 
 interface VideoDetailProps {
   videoId: string
@@ -495,11 +522,55 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <span>{viewCount.toLocaleString()} views</span>
                 <span>•</span>
-                <span>{new Date(video.createdAt).toLocaleDateString()}</span>
+                <span>{formatTimeAgo(video.createdAt)}</span>
               </div>
               
+              {/* Video Type and Tags - Enhanced Display */}
+              <div className="mt-4 space-y-3">
+                {/* Video Type */}
+                <div className="flex items-start">
+                  <div className="w-24 text-sm font-medium text-gray-700">Video Type:</div>
+                  <div className="flex-1">
+                    {video.videoType ? (
+                      <span className="bg-primary/15 text-primary px-3 py-1 rounded-full text-sm font-medium inline-block">
+                        {video.videoType}
+                      </span>
+                    ) : (
+                      <span className="text-gray-500 text-sm italic">Not specified</span>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Tags */}
+                <div className="flex items-start">
+                  <div className="w-24 text-sm font-medium text-gray-700">Tags:</div>
+                  <div className="flex-1">
+                    {video.tags && video.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {video.tags.map((tag, index) => (
+                          <span 
+                            key={index} 
+                            className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-500 text-sm italic">No tags</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Description */}
               {video.description && (
-                <p className="mt-2 text-gray-700 whitespace-pre-wrap">{video.description}</p>
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="text-sm font-medium text-gray-700 mb-2">Description:</div>
+                  <div className="text-gray-700 whitespace-pre-wrap">
+                    {video.description}
+                  </div>
+                </div>
               )}
             </div>
           </>

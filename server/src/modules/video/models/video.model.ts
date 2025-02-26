@@ -19,6 +19,8 @@ interface IVideo {
   views: number
   likes: number
   dislikes: number
+  tags?: string[]
+  videoType?: string
 }
 
 const videoSchema = new Schema<IVideo>(
@@ -55,7 +57,9 @@ const videoSchema = new Schema<IVideo>(
     dislikes: {
       type: Number,
       default: 0
-    }
+    },
+    tags: [{ type: String }],
+    videoType: { type: String }
   },
   { timestamps: true }
 )

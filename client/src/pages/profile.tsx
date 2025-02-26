@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '../components/ui/button'
 import { ProfileSetupModal } from '../components/profile/ProfileSetupModal'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar'
 import { Separator } from '../components/ui/separator'
 import { ScrollArea } from '../components/ui/scroll-area'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // Add this helper function at the top of the file
 const addCacheBuster = (url: string) => {
@@ -53,6 +54,7 @@ export function ProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private' | 'unlisted'>('all')
 
   const isOwnProfile = user?.username === username
 
@@ -221,6 +223,21 @@ export function ProfilePage() {
     enabled: !!(profileData?._id || profileData?.id),
   });
 
+  // Filter videos based on selected visibility
+  const filteredVideos = useMemo(() => {
+    if (!userVideos) return [];
+    
+    if (visibilityFilter === 'all') {
+      return userVideos;
+    }
+    
+    if (visibilityFilter === 'public') {
+      return userVideos.filter(v => v.visibility === 'public' || !v.visibility);
+    }
+    
+    return userVideos.filter(v => v.visibility === visibilityFilter);
+  }, [userVideos, visibilityFilter]);
+
   // Refetch videos when isOwnProfile changes
   useEffect(() => {
     if (profileData) {
@@ -364,25 +381,59 @@ export function ProfilePage() {
               {isOwnProfile ? "Your Videos" : `${displayData?.username}'s Videos`}
             </h2>
             
-            {/* Show visibility counts for own profile */}
+            {/* Show visibility filters for own profile */}
             {isOwnProfile && userVideos && userVideos.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2 sm:mt-0">
-                {userVideos.filter(v => v.visibility === 'private').length > 0 && (
-                  <div className="flex items-center text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
-                    <Lock className="h-3 w-3 mr-1" />
-                    <span>{userVideos.filter(v => v.visibility === 'private').length} Private</span>
-                  </div>
-                )}
-                {userVideos.filter(v => v.visibility === 'unlisted').length > 0 && (
-                  <div className="flex items-center text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
-                    <EyeOff className="h-3 w-3 mr-1" />
-                    <span>{userVideos.filter(v => v.visibility === 'unlisted').length} Unlisted</span>
-                  </div>
-                )}
-                <div className="flex items-center text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                <button
+                  onClick={() => setVisibilityFilter('all')}
+                  className={`flex items-center text-xs px-2 py-1 rounded transition-colors ${
+                    visibilityFilter === 'all' 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <span>All ({userVideos.length})</span>
+                </button>
+                
+                <button
+                  onClick={() => setVisibilityFilter('public')}
+                  className={`flex items-center text-xs px-2 py-1 rounded transition-colors ${
+                    visibilityFilter === 'public' 
+                      ? 'bg-green-500 text-white' 
+                      : 'bg-green-100 text-green-700 hover:bg-green-200'
+                  }`}
+                >
                   <Eye className="h-3 w-3 mr-1" />
                   <span>{userVideos.filter(v => v.visibility === 'public' || !v.visibility).length} Public</span>
-                </div>
+                </button>
+                
+                {userVideos.filter(v => v.visibility === 'private').length > 0 && (
+                  <button
+                    onClick={() => setVisibilityFilter('private')}
+                    className={`flex items-center text-xs px-2 py-1 rounded transition-colors ${
+                      visibilityFilter === 'private' 
+                        ? 'bg-red-500 text-white' 
+                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    }`}
+                  >
+                    <Lock className="h-3 w-3 mr-1" />
+                    <span>{userVideos.filter(v => v.visibility === 'private').length} Private</span>
+                  </button>
+                )}
+                
+                {userVideos.filter(v => v.visibility === 'unlisted').length > 0 && (
+                  <button
+                    onClick={() => setVisibilityFilter('unlisted')}
+                    className={`flex items-center text-xs px-2 py-1 rounded transition-colors ${
+                      visibilityFilter === 'unlisted' 
+                        ? 'bg-yellow-500 text-white' 
+                        : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                    }`}
+                  >
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    <span>{userVideos.filter(v => v.visibility === 'unlisted').length} Unlisted</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -393,83 +444,98 @@ export function ProfilePage() {
               <div className="flex justify-center py-10">
                 <LoadingSpinner size={32} />
               </div>
-            ) : userVideos && userVideos.length > 0 ? (
+            ) : filteredVideos && filteredVideos.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {userVideos.map((video) => {
-                  // Ensure we have a valid ID for the video
-                  const videoId = video.id || video._id;
-                  
-                  // Skip videos without an ID
-                  if (!videoId) return null;
-                  
-                  // Determine if video is private or unlisted
-                  const isPrivate = video.visibility === 'private';
-                  const isUnlisted = video.visibility === 'unlisted';
-                  
-                  return (
-                    <Card 
-                      key={videoId} 
-                      className={`overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${isPrivate ? 'border-red-300' : isUnlisted ? 'border-yellow-300' : ''}`}
-                      onClick={() => navigate(`/video/${videoId}`)}
-                    >
-                      <div className="aspect-video relative">
-                        {video.thumbnailUrl ? (
-                          <img 
-                            src={video.thumbnailUrl} 
-                            alt={video.title} 
-                            className={`w-full h-full object-cover ${isPrivate ? 'opacity-80' : ''}`}
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-muted flex items-center justify-center">
-                            <Video className="h-10 w-10 text-muted-foreground" />
+                <AnimatePresence>
+                  {filteredVideos.map((video) => {
+                    // Ensure we have a valid ID for the video
+                    const videoId = video.id || video._id;
+                    
+                    // Skip videos without an ID
+                    if (!videoId) return null;
+                    
+                    // Determine if video is private or unlisted
+                    const isPrivate = video.visibility === 'private';
+                    const isUnlisted = video.visibility === 'unlisted';
+                    const isPublic = video.visibility === 'public' || !video.visibility;
+                    
+                    return (
+                      <motion.div
+                        key={videoId}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Card 
+                          className={`overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${
+                            isPrivate ? 'border-red-300' : 
+                            isUnlisted ? 'border-yellow-300' : 
+                            'border-green-300'
+                          }`}
+                          onClick={() => navigate(`/video/${videoId}`)}
+                        >
+                          <div className="aspect-video relative">
+                            {video.thumbnailUrl ? (
+                              <img 
+                                src={video.thumbnailUrl} 
+                                alt={video.title} 
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-muted flex items-center justify-center">
+                                <Video className="h-10 w-10 text-muted-foreground" />
+                              </div>
+                            )}
+                            
+                            {/* Visibility indicators */}
+                            <div className="absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded-sm flex items-center shadow-sm" 
+                              style={{
+                                backgroundColor: isPrivate ? 'rgba(239, 68, 68, 0.9)' : 
+                                                 isUnlisted ? 'rgba(234, 179, 8, 0.9)' : 
+                                                 'rgba(34, 197, 94, 0.9)',
+                                color: 'white'
+                              }}>
+                              {isPrivate && <Lock className="h-3 w-3 mr-1" />}
+                              {isUnlisted && <EyeOff className="h-3 w-3 mr-1" />}
+                              {isPublic && <Eye className="h-3 w-3 mr-1" />}
+                              <span>{isPrivate ? 'Private' : isUnlisted ? 'Unlisted' : 'Public'}</span>
+                            </div>
+                            
+                            {/* Duration badge if available */}
+                            {video.duration && (
+                              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
+                                {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        
-                        {/* Visibility indicators */}
-                        {isPrivate && (
-                          <div className="absolute top-2 right-2 bg-red-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
-                            <Lock className="h-3 w-3 mr-1" />
-                            <span>Private</span>
-                          </div>
-                        )}
-                        
-                        {isUnlisted && (
-                          <div className="absolute top-2 right-2 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
-                            <EyeOff className="h-3 w-3 mr-1" />
-                            <span>Unlisted</span>
-                          </div>
-                        )}
-                        
-                        {/* Duration badge if available */}
-                        {video.duration && (
-                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-                            {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
-                          </div>
-                        )}
-                      </div>
-                      <CardContent className="p-3">
-                        <div className="flex items-start justify-between">
-                          <h3 className="font-medium line-clamp-1 flex-1">{video.title}</h3>
-                          {/* Small visibility icon for quick identification */}
-                          {isPrivate && <Lock className="h-3.5 w-3.5 text-red-500 ml-1 flex-shrink-0" />}
-                          {isUnlisted && <EyeOff className="h-3.5 w-3.5 text-yellow-500 ml-1 flex-shrink-0" />}
-                        </div>
-                        <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Users className="h-3 w-3" /> {video.views || 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Heart className="h-3 w-3" /> {video.likes || 0}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between">
+                              <h3 className="font-medium line-clamp-1 flex-1">{video.title}</h3>
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3 w-3" /> {video.views || 0}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Heart className="h-3 w-3" /> {video.likes || 0}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
               </div>
             ) : (
               <div className="text-center py-10 text-muted-foreground">
-                No videos found. {isOwnProfile ? "Upload your first video!" : "This user hasn't uploaded any videos yet."}
+                {userVideos && userVideos.length > 0 
+                  ? `No ${visibilityFilter !== 'all' ? visibilityFilter : ''} videos found.` 
+                  : isOwnProfile 
+                    ? "Upload your first video!" 
+                    : "This user hasn't uploaded any videos yet."}
               </div>
             )}
           </div>
