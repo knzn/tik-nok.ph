@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar'
 import { Separator } from '../components/ui/separator'
 import { ScrollArea } from '../components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
+import { formatDuration } from '../utils/formatters'
 
 // Add this helper function at the top of the file
 const addCacheBuster = (url: string) => {
@@ -502,17 +503,17 @@ export function ProfilePage() {
                               {isPublic && <Eye className="h-3 w-3 mr-1" />}
                               <span>{isPrivate ? 'Private' : isUnlisted ? 'Unlisted' : 'Public'}</span>
                             </div>
-                            
-                            {/* Duration badge if available */}
-                            {video.duration && (
-                              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-                                {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
-                              </div>
-                            )}
                           </div>
                           <CardContent className="p-3">
                             <div className="flex items-start justify-between">
                               <h3 className="font-medium line-clamp-1 flex-1">{video.title}</h3>
+                              
+                              {/* Duration badge moved here */}
+                              {video.duration && (
+                                <div className="ml-2 flex-shrink-0 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs px-1.5 py-0.5 rounded">
+                                  {formatDuration(video.duration)}
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1">

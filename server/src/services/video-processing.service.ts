@@ -86,6 +86,10 @@ export class VideoProcessingService {
   private static readonly SEGMENT_DURATION = 4 // seconds
   private static readonly KEYFRAME_INTERVAL = 48 // frames
 
+  // Watermark settings
+  private static readonly LOGO_PATH = path.resolve(process.cwd(), 'public', 'assets', 'tiknok-logo.png')
+  private static readonly WATERMARK_FONT = path.resolve(process.cwd(), 'public', 'assets', 'fonts', 'Arial.ttf')
+
   // Add a map to track active FFmpeg processes by their command objects
   private static activeFFmpegProcesses: Map<string, { command: ReturnType<typeof ffmpeg>; process?: any }> = new Map();
 
@@ -242,18 +246,22 @@ export class VideoProcessingService {
   }
 
   static async processVideo(inputPath: string, videoId: string): Promise<any> {
-    if (!(await this.checkSystemResources())) {
-      throw new Error('System resources not available')
-    }
-    console.log(`[VideoProcessing] Starting process for video ${videoId}`)
+    console.log(`Starting video processing for ${videoId}`)
     
     try {
-      // Update initial status
-      await VideoModel.findByIdAndUpdate(videoId, {
-        processingStage: 'initializing',
-        processingProgress: 0
-      });
-
+      // Get user info for watermarking
+      const video = await VideoModel.findById(videoId).populate('userId', 'username')
+      if (!video) {
+        throw new Error(`Video ${videoId} not found`)
+      }
+      
+      const username = video.userId && typeof video.userId === 'object' ? 
+        (video.userId as any).username || 'user' : 'user'
+      
+      // Ensure logo file exists, create if not
+      await this.ensureLogoExists()
+      
+      // Add to processing queue
       return new Promise((resolve, reject) => {
         const task = async () => {
           try {
@@ -350,17 +358,64 @@ export class VideoProcessingService {
   }
 
   private static generateThumbnail(inputPath: string, outputPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .screenshots({
-          count: 1,
-          folder: path.dirname(outputPath),
-          filename: path.basename(outputPath),
-          size: '320x240'
-        })
-        .on('end', resolve)
-        .on('error', reject)
-    })
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Get video metadata to determine duration
+        const metadata = await this.getVideoMetadata(inputPath);
+        const duration = metadata.duration;
+        
+        // Create temp directory for thumbnails
+        const tempDir = path.join(path.dirname(outputPath), 'temp_thumbnails');
+        await fs.mkdir(tempDir, { recursive: true });
+        
+        // Generate 5 thumbnails at different points in the video
+        const thumbnailCount = 5;
+        const thumbnailPromises = [];
+        
+        for (let i = 0; i < thumbnailCount; i++) {
+          // Take screenshots at 10%, 30%, 50%, 70%, and 90% of the video
+          const timePercent = 10 + (i * 20);
+          const timeInSeconds = Math.max(1, Math.floor((duration * timePercent) / 100));
+          
+          const tempOutputPath = path.join(tempDir, `thumbnail_${i}.jpg`);
+          
+          const thumbnailPromise = new Promise<string>((resolveThumb, rejectThumb) => {
+            ffmpeg(inputPath)
+              .screenshot({
+                count: 1,
+                folder: tempDir,
+                filename: `thumbnail_${i}.jpg`,
+                timemarks: [timeInSeconds.toString()],
+                size: '1280x720'
+              })
+              .on('end', () => resolveThumb(tempOutputPath))
+              .on('error', rejectThumb);
+          });
+          
+          thumbnailPromises.push(thumbnailPromise);
+        }
+        
+        // Wait for all thumbnails to be generated
+        const thumbnailPaths = await Promise.all(thumbnailPromises);
+        
+        // Select the best thumbnail (for now, just use the middle one)
+        // In a real implementation, you could use image analysis to select the best one
+        const selectedThumbnail = thumbnailPaths[Math.floor(thumbnailCount / 2)];
+        
+        // Copy the selected thumbnail to the final location
+        await fs.copyFile(selectedThumbnail, outputPath);
+        
+        // Clean up temporary thumbnails
+        for (const thumbnailPath of thumbnailPaths) {
+          await fs.unlink(thumbnailPath).catch(console.error);
+        }
+        await fs.rmdir(tempDir).catch(console.error);
+        
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
   private static calculateETA(
@@ -381,98 +436,94 @@ export class VideoProcessingService {
   }
 
   private static async createHLSStream(inputPath: string, outputDir: string, metadata: VideoMetadata): Promise<void> {
-    const startTime = Date.now()
-    const outputDirName = path.basename(outputDir)
-    
-    try {
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('FFmpeg process timed out'))
-        }, this.PROCESS_TIMEOUT)
-      })
-
-      await Promise.race([
-        new Promise<void>((resolve, reject) => {
-          const command = ffmpeg(inputPath)
-            .outputOptions([
-              '-c:v libx264',
-              '-profile:v main',
-              `-crf ${this.QUALITY_PRESETS[0].crf}`,
-              '-preset medium',
-              '-sc_threshold 0',
-              `-g ${this.KEYFRAME_INTERVAL}`,
-              `-keyint_min ${this.KEYFRAME_INTERVAL}`,
-              `-hls_time ${this.SEGMENT_DURATION}`,
-              '-hls_list_size 0',
-              '-hls_playlist_type vod',
-              `-b:v ${this.getOptimalBitrate(metadata.resolution.width, metadata.resolution.height, metadata.fps)}`,
-              `-maxrate ${this.getOptimalBitrate(metadata.resolution.width, metadata.resolution.height, metadata.fps)}`,
-              `-bufsize ${this.getOptimalBitrate(metadata.resolution.width, metadata.resolution.height, metadata.fps)}`,
-              `-vf scale=-2:${this.QUALITY_PRESETS[0].height}`,
-              '-c:a aac',
-              '-b:a 128k',
-              '-ac 2',
-              '-hls_segment_filename',
-              path.join(outputDir, `${this.QUALITY_PRESETS[0].height}p_%03d.ts`),
-              // Add resource constraints
-              `-threads ${Math.max(2, Math.floor(require('os').cpus().length / 2))}`,
-              '-memory_limit 512M',
-            ])
-            .output(path.join(outputDir, `${this.QUALITY_PRESETS[0].height}p.m3u8`))
-
-          command.on('progress', (progress: { percent: number }) => {
-            const totalProgress = progress.percent / 100
-            this.updateProgress(outputDirName, totalProgress, 'transcoding', {
-              stage: 'transcoding',
-              progress: totalProgress,
-              currentTask: `${this.QUALITY_PRESETS[0].height}p variant (${Math.round(progress.percent)}%)`,
-              eta: this.calculateETA(startTime, totalProgress)
+    // Modified to add watermarking
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Get video info for watermarking
+        const videoId = path.basename(outputDir)
+        const video = await VideoModel.findById(videoId).populate('userId', 'username')
+        const username = video && video.userId && typeof video.userId === 'object' ? 
+          (video.userId as any).username || 'user' : 'user'
+        
+        // Ensure logo exists
+        await this.ensureLogoExists()
+        
+        // Create command
+        const command = ffmpeg(inputPath)
+        
+        // Add watermarks
+        const complexFilters: string[] = [
+          // Add logo to top-left corner
+          `[0:v]overlay=10:10[withlogo]`,
+          // Add username to mid-right
+          `[withlogo]drawtext=text='@${username}':fontsize=24:fontcolor=white:shadowcolor=black:shadowx=2:shadowy=2:x=w-tw-20:y=h/2[watermarked]`
+        ]
+        
+        // Add an output for each quality level
+        this.QUALITY_PRESETS.forEach(({ name, height, bitrate, crf, preset }, index) => {
+          const outputOptions = [
+            `-c:v libx264`,
+            `-crf ${crf}`,
+            `-preset ${preset}`,
+            `-c:a aac`,
+            `-b:a 128k`,
+            `-vf scale=-2:${height}`,
+            `-b:v ${bitrate}`,
+            `-hls_time ${this.SEGMENT_DURATION}`,
+            `-hls_list_size 0`,
+            `-hls_segment_filename ${outputDir}/${name}_%03d.ts`,
+            `-hls_playlist_type vod`,
+            `-f hls`
+          ]
+          
+          // Apply watermark filter to the first output only
+          if (index === 0) {
+            command
+              .complexFilter(complexFilters, 'watermarked')
+              .output(`${outputDir}/${name}.m3u8`)
+              .outputOptions(outputOptions)
+              .map('[watermarked]')
+              .map('0:a')
+          } else {
+            command
+              .output(`${outputDir}/${name}.m3u8`)
+              .outputOptions(outputOptions)
+          }
+        })
+        
+        // Create master playlist
+        const masterPlaylist = this.generateMasterPlaylist(this.QUALITY_PRESETS)
+        await fs.writeFile(
+          path.join(outputDir, 'master.m3u8'),
+          masterPlaylist
+        )
+        
+        // Execute command
+        command
+          .on('start', (commandLine) => {
+            console.log(`FFmpeg started with command: ${commandLine}`)
+          })
+          .on('progress', (progress) => {
+            const percent = Math.round(progress.percent || 0)
+            this.updateProgress(videoId, percent, 'transcoding', {
+              fps: progress.frames / ((progress.timemark.split(':').reduce((acc: number, time: string) => (60 * acc) + +time, 0)) || 1),
+              frame: progress.frames,
+              time: progress.timemark
             })
           })
-
-          command.on('end', () => {
-            this.activeFFmpegProcesses.delete(outputDirName)
+          .on('end', () => {
+            console.log(`FFmpeg processing completed for ${videoId}`)
             resolve()
           })
-
-          command.on('error', (err: Error) => {
-            this.activeFFmpegProcesses.delete(outputDirName)
+          .on('error', (err) => {
+            console.error(`FFmpeg processing error for ${videoId}:`, err)
             reject(err)
           })
-
-          // Use process termination event
-          process.on('SIGTERM', () => {
-            if (command) {
-              try {
-                // Remove the kill call that's causing issues
-                // Just remove from tracking
-                this.activeFFmpegProcesses.delete(outputDirName)
-                console.log('FFmpeg process removed from tracking')
-              } catch (error) {
-                console.error('Error handling FFmpeg process:', error)
-              }
-            }
-          })
-
-          this.activeFFmpegProcesses.set(outputDirName, { command })
-          command.run()
-        }),
-        timeoutPromise
-      ])
-    } catch (error) {
-      // Cleanup on error
-      const ffmpegProcess = this.activeFFmpegProcesses.get(outputDirName)
-      if (ffmpegProcess) {
-        try {
-          // Attempt to kill the process more safely
-          this.activeFFmpegProcesses.delete(outputDirName)
-          console.log('FFmpeg process terminated')
-        } catch (killError) {
-          console.error('Error killing FFmpeg process:', killError)
-        }
+          .run()
+      } catch (error) {
+        reject(error)
       }
-      throw error
-    }
+    })
   }
 
   private static generateMasterPlaylist(resolutions: { height: number; bitrate: string }[]): string {
@@ -564,5 +615,36 @@ export class VideoProcessingService {
     // Broadcast progress using both services for backward compatibility
     WebSocketService.broadcastProgress(videoId, progress, stage, details)
     SocketService.broadcastVideoProgress(videoId, progress, stage, details)
+  }
+
+  // Ensure the logo file exists
+  private static async ensureLogoExists(): Promise<void> {
+    try {
+      await fs.access(this.LOGO_PATH)
+    } catch (error) {
+      console.warn(`Logo file not found at ${this.LOGO_PATH}, creating a placeholder`)
+      
+      // Create directory if it doesn't exist
+      const logoDir = path.dirname(this.LOGO_PATH)
+      await fs.mkdir(logoDir, { recursive: true })
+      
+      // Create font directory if it doesn't exist
+      const fontDir = path.dirname(this.WATERMARK_FONT)
+      await fs.mkdir(fontDir, { recursive: true })
+      
+      // Create a simple placeholder logo using ffmpeg
+      return new Promise((resolve, reject) => {
+        ffmpeg()
+          .input('color=c=white:s=200x100:d=1')
+          .inputFormat('lavfi')
+          .complexFilter([
+            'drawtext=text=TikNok:fontsize=48:fontcolor=black:x=(w-text_w)/2:y=(h-text_h)/2'
+          ])
+          .output(this.LOGO_PATH)
+          .on('end', resolve)
+          .on('error', reject)
+          .run()
+      })
+    }
   }
 } 

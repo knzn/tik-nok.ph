@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import authRoutes from './modules/auth/routes/auth.routes'
 import videoRoutes from './modules/video/routes/video.routes'
+import videoUploadRoutes from './routes/video.routes'
 import { userRoutes } from './modules/user/routes/user.routes'
 import { connectDatabase } from './config/database'
 import { config } from './config/environment'
@@ -107,6 +108,7 @@ app.use('/thumbnails', (req, res, next) => {
 // API routes
 app.use('/api/auth', authRoutes)
 app.use('/api/videos', videoRoutes)
+app.use('/api/videos', videoUploadRoutes)
 app.use('/api/users', userRoutes)
 
 // Health check endpoint

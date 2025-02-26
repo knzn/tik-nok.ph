@@ -9,6 +9,8 @@ import { CommentModel } from '../models/comment.model'
 import { FollowModel } from '../../user/models/follow.model'
 import jwt from 'jsonwebtoken'
 import { config } from '../../../config/environment'
+import ffmpeg from 'fluent-ffmpeg'
+import fs from 'fs/promises'
 
 interface UserDocument extends Document {
   _id: string;
@@ -44,6 +46,16 @@ export const upload = multer({
   }
 })
 
+// Helper function to get video duration using ffprobe
+const getVideoDuration = (filePath: string): Promise<number> => {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) return reject(err);
+      resolve(metadata.format.duration || 0);
+    });
+  });
+};
+
 export class VideoController {
   constructor(private videoProcessingService: VideoProcessingService) {}
 
@@ -64,6 +76,20 @@ export class VideoController {
       if (!req.user?.id) {
         res.status(401).json({ error: 'Authentication required' })
         return
+      }
+
+      // Check video duration (2 minutes max)
+      try {
+        const duration = await getVideoDuration(req.file.path);
+        if (duration > 120) { // 120 seconds = 2 minutes
+          // Delete the uploaded file
+          await fs.unlink(req.file.path).catch(console.error);
+          res.status(400).json({ error: 'Video duration exceeds the 2-minute limit' });
+          return;
+        }
+      } catch (durationError) {
+        console.error('Error checking video duration:', durationError);
+        // Continue processing even if duration check fails
       }
 
       // Parse tags if they exist

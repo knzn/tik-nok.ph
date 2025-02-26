@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { Video } from '../../../types/video.types'
 import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
 import { Lock, Eye, EyeOff } from 'lucide-react'
+import { formatDuration } from '../../../utils/formatters'
 
 interface VideoCardProps {
   video: Video
@@ -67,13 +68,6 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
             className={`w-full h-full object-cover ${isPrivate ? 'opacity-80' : ''}`}
           />
           
-          {/* Duration badge */}
-          {video.duration && (
-            <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 py-0.5 rounded">
-              {video.duration}
-            </div>
-          )}
-
           {/* Visibility indicators */}
           {isPrivate && (
             <div className="absolute top-1 right-1 bg-red-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
@@ -86,6 +80,15 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
             <div className="absolute top-1 right-1 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
               <EyeOff className="w-3 h-3 mr-1" />
               <span>Unlisted</span>
+            </div>
+          )}
+          
+          {/* Duration badge for compact view */}
+          {video.duration && compact && (
+            <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded-sm">
+              {typeof video.duration === 'number' 
+                ? formatDuration(video.duration)
+                : video.duration}
             </div>
           )}
         </div>
@@ -109,6 +112,15 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
               <h3 className={`${compact ? 'text-sm' : 'text-base'} font-semibold tracking-tight line-clamp-2 text-gray-900 dark:text-gray-50 leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 flex-1`}>
                 {video.title}
               </h3>
+              
+              {/* Duration badge moved here for non-compact view */}
+              {video.duration && !compact && (
+                <div className="ml-2 flex-shrink-0 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs px-1.5 py-0.5 rounded">
+                  {typeof video.duration === 'number' 
+                    ? formatDuration(video.duration)
+                    : video.duration}
+                </div>
+              )}
               
               {/* Small visibility indicators for compact view */}
               {compact && isPrivate && (
