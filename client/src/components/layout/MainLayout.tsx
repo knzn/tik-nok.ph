@@ -61,10 +61,8 @@ export function MainLayout({ children, showSidebar = true }: MainLayoutProps) {
             <Sidebar className="hidden md:block fixed left-0 top-16 h-[calc(100vh-4rem)]" />
           )}
           
-          <main className={`flex-1 flex items-start justify-center w-full ${showSidebar ? 'md:ml-64' : ''}`}>
-            <div className="w-full">
-              {children}
-            </div>
+          <main className={`flex-1 w-full ${showSidebar ? 'md:ml-64' : ''}`}>
+            {children}
           </main>
         </div>
       </div>

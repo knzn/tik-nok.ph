@@ -2,79 +2,112 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../../../types/video.types'
 import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
-import { ThumbsUp, Eye } from 'lucide-react'
 
 interface VideoCardProps {
   video: Video
   onVideoClick?: () => void
+  compact?: boolean // Add compact prop for suggested videos sidebar
 }
 
-export const VideoCard = ({ video, onVideoClick }: VideoCardProps) => {
-  const [isHovered, setIsHovered] = useState(false)
+// Simple function to format date
+const formatTimeAgo = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (isNaN(diffInSeconds)) return 'Unknown';
+    
+    if (diffInSeconds < 60) return `${diffInSeconds}s`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d`;
+    if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)}mo`;
+    
+    return `${Math.floor(diffInSeconds / 31536000)}y`;
+  } catch (error) {
+    return 'Unknown';
+  }
+};
 
+export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardProps) => {
   // Get username safely with fallback
   const username = video.userId?.username || 'Unknown User'
   const profilePicture = video.userId?.profilePicture
   const firstLetter = username.charAt(0).toUpperCase()
   const videoId = video.id || video._id // Handle both id formats
+  
+  // Format the date if available
+  const formattedDate = video.createdAt 
+    ? formatTimeAgo(video.createdAt) 
+    : 'Unknown'
+
+  const handleClick = () => {
+    if (onVideoClick) onVideoClick()
+    else window.location.href = `/video/${videoId}`
+  }
 
   return (
     <div 
-      className="video-card group cursor-pointer"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={() => {
-        if (onVideoClick) onVideoClick()
-        else window.location.href = `/video/${videoId}`
-      }}
+      className={`group cursor-pointer overflow-hidden ${compact ? 'mb-1.5' : 'mb-3'}`}
+      onClick={handleClick}
     >
-      {/* Video Thumbnail */}
-      <img 
-        src={video.thumbnailUrl} 
-        alt={video.title}
-        className="w-full h-full object-cover"
-      />
-
-      {/* Overlay Gradient */}
-      <div className="video-overlay" />
-
-      {/* Video Info */}
-      <div className="absolute bottom-20 left-4 right-16 z-10">
-        <h3 className="text-white text-lg font-semibold line-clamp-2">
-          {video.title}
-        </h3>
-        <div className="flex items-center gap-4 mt-2 text-white/80">
-          <div className="flex items-center gap-1">
-            <ThumbsUp className="w-4 h-4" />
-            <span>{video.likes || 0}</span>
+      {/* Card layout with no padding */}
+      <div className="flex flex-col">
+        {/* Thumbnail */}
+        <div className="relative aspect-video rounded-sm overflow-hidden">
+          <img 
+            src={video.thumbnailUrl} 
+            alt={video.title}
+            className="w-full h-full object-cover"
+          />
+          
+          {/* Duration badge */}
+          {video.duration && (
+            <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 py-0.5 rounded">
+              {video.duration}
+            </div>
+          )}
+        </div>
+        
+        {/* Content area with minimal padding */}
+        <div className={`flex ${compact ? 'pt-1' : 'pt-1.5'}`}>
+          {/* Avatar */}
+          <div className="flex-shrink-0 mr-2 mt-0.5">
+            <Avatar className={`${compact ? 'h-5 w-5' : 'h-6 w-6'}`}>
+              <AvatarImage src={profilePicture} alt={username} />
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                {firstLetter}
+              </AvatarFallback>
+            </Avatar>
           </div>
-          <div className="flex items-center gap-1">
-            <Eye className="w-4 h-4" />
-            <span>{video.views || 0}</span>
+          
+          {/* Text content */}
+          <div className="flex-1 min-w-0">
+            {/* Title */}
+            <h3 className={`${compact ? 'text-sm' : 'text-base'} font-semibold tracking-tight line-clamp-2 text-gray-900 dark:text-gray-50 leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400`}>
+              {video.title}
+            </h3>
+            
+            {/* Username */}
+            <Link 
+              to={`/profile/${username}`}
+              className="block text-xs text-gray-600 dark:text-gray-300 truncate hover:underline mt-0.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              @{username}
+            </Link>
+            
+            {/* Stats */}
+            <div className="flex items-center text-xs text-gray-600 dark:text-gray-300 mt-1">
+              <span className="font-medium">{video.views || 0} views</span>
+              <span className="mx-1.5">•</span>
+              <span className="font-medium">{video.likes || 0} likes</span>
+              <span className="mx-1.5">•</span>
+              <span>{formattedDate}</span>
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* User Info */}
-      <div className="absolute bottom-4 left-4 flex items-center gap-2 z-10">
-        <Avatar className="h-10 w-10">
-          <AvatarImage 
-            src={profilePicture} 
-            alt={username} 
-          />
-          <AvatarFallback className="bg-primary text-primary-foreground">
-            {firstLetter}
-          </AvatarFallback>
-        </Avatar>
-        <Link 
-          to={`/profile/${username}`}
-          className="text-white font-medium hover:underline"
-          onClick={(e) => {
-            e.stopPropagation()
-          }}
-        >
-          @{username}
-        </Link>
       </div>
     </div>
   )

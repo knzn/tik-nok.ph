@@ -18,7 +18,7 @@ export const Layout = ({ children }: LayoutProps) => {
       <Navbar />
       <div className="pt-16 flex w-full">
         {showSidebar && <Sidebar />}
-        <main className={`flex-1 min-h-[calc(100vh-4rem)] ${showSidebar ? 'ml-80' : ''} flex items-center justify-center`}>
+        <main className={`flex-1 min-h-[calc(100vh-4rem)] ${showSidebar ? 'ml-80' : ''}`}>
           {children}
         </main>
       </div>
