@@ -66,9 +66,41 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
     queryFn: () => VideoService.getVideo(videoId)
   })
 
-  // Check if user is owner
-  // const isOwner = user?.id === video?.userId?._id || user?.id === video?.userId?.id
-  const isOwner = user?.id === video?.userId._id
+  // Check if user is owner - handle different ID formats
+  const isOwner = user && video && (() => {
+    // Get all possible formats of user ID
+    const userId = user.id;
+    
+    // Get all possible formats of video owner ID
+    const videoUserId = video.userId;
+    
+    // Log the IDs for debugging
+    console.log('Checking video ownership:', {
+      userId,
+      videoUserId,
+      videoUserIdType: typeof videoUserId,
+      videoUserIdObj: videoUserId,
+      videoUserIdString: typeof videoUserId === 'object' ? 
+        (videoUserId._id?.toString() || videoUserId.id?.toString()) : 
+        videoUserId?.toString()
+    });
+    
+    // Try all possible combinations
+    if (typeof videoUserId === 'string') {
+      return userId === videoUserId;
+    }
+    
+    if (typeof videoUserId === 'object') {
+      return (
+        userId === videoUserId._id ||
+        userId === videoUserId.id ||
+        userId === videoUserId._id?.toString() ||
+        userId === videoUserId.id?.toString()
+      );
+    }
+    
+    return false;
+  })();
 
   // Add effect to check follow status and get followers count
   useEffect(() => {

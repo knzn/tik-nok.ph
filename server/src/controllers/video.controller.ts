@@ -34,7 +34,10 @@ export class VideoController {
         userId: req.user!.id,
         status: 'processing',
         processingProgress: 0,
-        processingStage: 'initializing'
+        processingStage: 'initializing',
+        videoType: req.body.videoType || '',
+        visibility: req.body.visibility || 'public',
+        tags: req.body.tags ? JSON.parse(req.body.tags) : []
       })
 
       // Add to processing queue instead of direct processing

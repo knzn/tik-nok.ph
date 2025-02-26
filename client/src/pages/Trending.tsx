@@ -51,16 +51,17 @@ const VideoCategory = ({ title, type }: CategoryProps) => {
         <Button
           variant="outline"
           size="icon"
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex"
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm border-0 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex hover:bg-background/90"
           onClick={() => scroll('left')}
+          aria-label="Scroll left"
         >
-          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
+          <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" />
         </Button>
 
         {/* Videos container */}
         <div
           ref={scrollContainerRef}
-          className="flex overflow-x-auto scrollbar-hide gap-3 sm:gap-4 pb-4 px-1 sm:px-0"
+          className="flex overflow-x-auto scrollbar-hide gap-3 sm:gap-4 pb-4 px-1 sm:px-8"
           style={{ scrollSnapType: 'x mandatory' }}
         >
           {videos.map((video) => {
@@ -85,10 +86,11 @@ const VideoCategory = ({ title, type }: CategoryProps) => {
         <Button
           variant="outline"
           size="icon"
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex"
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm border-0 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex hover:bg-background/90"
           onClick={() => scroll('right')}
+          aria-label="Scroll right"
         >
-          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
+          <ChevronRight className="h-5 w-5 md:h-6 md:w-6" />
         </Button>
       </div>
     </div>

@@ -20,10 +20,12 @@ export interface Video {
   views?: number
   likes?: number
   comments?: number
-  status: 'processing' | 'ready' | 'public' | 'private'
+  status: 'processing' | 'ready' | 'public' | 'unlisted' | 'private' | 'failed'
   category?: string
+  videoType?: string
   tags?: string[]
   quality?: string[]
+  visibility?: 'public' | 'unlisted' | 'private'
   createdAt: string
   updatedAt: string
   aspectRatio?: number
@@ -39,7 +41,7 @@ interface VideoUploadResponse {
   _id: string  // MongoDB returns _id
   id?: string
   title: string
-  status: 'processing' | 'ready' | 'public' | 'private'
+  status: 'processing' | 'ready' | 'public' | 'unlisted' | 'private' | 'failed'
   description?: string
   url: string
   hlsUrl: string
@@ -50,7 +52,9 @@ interface VideoUploadResponse {
   likes: number
   comments: number
   category?: string
+  videoType?: string
   tags: string[]
+  visibility?: 'public' | 'unlisted' | 'private'
   createdAt: string
   updatedAt: string
   aspectRatio?: number
@@ -76,26 +80,77 @@ export const VideoService = {
     return data
   },
 
-  async getVideo(id: string): Promise<Video> {
+  async getVideo(videoId: string): Promise<Video> {
+    if (!videoId) {
+      throw new Error('Video ID is required')
+    }
+
     try {
-      if (!id) {
-        throw new Error('Video ID is required')
+      // Get auth token from localStorage
+      const token = localStorage.getItem('token')
+      const userJson = localStorage.getItem('user')
+      const user = userJson ? JSON.parse(userJson) : null
+      
+      console.log('Fetching video:', {
+        videoId,
+        hasToken: !!token,
+        userId: user?.id || 'not logged in',
+        tokenFirstChars: token ? token.substring(0, 10) + '...' : 'no token',
+        tokenLength: token ? token.length : 0
+      })
+
+      // Make request with auth token if available - ensure proper format
+      const headers: Record<string, string> = {}
+      if (token) {
+        // Make sure token is properly formatted with 'Bearer ' prefix
+        headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`
+        console.log('Using authorization header:', {
+          headerType: typeof headers.Authorization,
+          headerLength: headers.Authorization.length,
+          headerStart: headers.Authorization.substring(0, 15) + '...',
+          hasBearer: headers.Authorization.startsWith('Bearer ')
+        })
       }
-      const { data } = await api.get<Video>(`/videos/${id}`)
-      return data
+
+      // Use the api instance which already has the interceptor for auth
+      // No need to pass headers manually as the interceptor will handle it
+      const response = await api.get<Video>(`/videos/${videoId}`)
+      
+      console.log('Video fetch response:', {
+        videoId: response.data._id || response.data.id,
+        userId: response.data.userId?._id || response.data.userId,
+        visibility: response.data.visibility,
+        status: response.data.status
+      })
+      
+      return response.data
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        // Remove from processing videos if it's a 404
-        const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
-        const updatedVideos = storedVideos.filter((v: any) => v.id !== id)
-        localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('Video fetch error:', {
+          status: error.response.status,
+          message: error.response.data?.message || error.message,
+          videoId
+        })
         
-        // Cache the 404 to prevent further requests
-        const notFoundCache = {
-          id,
-          timestamp: Date.now()
+        // If it's a 403 Forbidden error for private video, pass through the error
+        if (error.response.status === 403) {
+          throw error
         }
-        localStorage.setItem(`video_not_found_${id}`, JSON.stringify(notFoundCache))
+        
+        // Handle 404 Not Found
+        if (error.response.status === 404) {
+          // Remove from processing videos if it was there
+          const processingVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
+          const updatedProcessingVideos = processingVideos.filter((id: string) => id !== videoId)
+          localStorage.setItem('processingVideos', JSON.stringify(updatedProcessingVideos))
+          
+          // Cache not found status to prevent further requests
+          const notFoundVideos = JSON.parse(localStorage.getItem('notFoundVideos') || '[]')
+          if (!notFoundVideos.includes(videoId)) {
+            notFoundVideos.push(videoId)
+            localStorage.setItem('notFoundVideos', JSON.stringify(notFoundVideos))
+          }
+        }
       }
       throw error
     }
@@ -181,19 +236,41 @@ export const VideoService = {
         attempts++
         setTimeout(poll, 5000) // Poll every 5 seconds
       } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-          // Cache the 404 response
-          const notFoundCache = {
-            id: videoId,
-            timestamp: Date.now()
+        if (axios.isAxiosError(error)) {
+          // Handle 403 Forbidden (private video) - consider it as ready
+          if (error.response?.status === 403) {
+            // Remove from processing videos - it's ready but private
+            const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
+            const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
+            localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+            
+            // Dispatch a custom event for private video completion
+            const privateVideo = {
+              id: videoId,
+              status: 'ready',
+              visibility: 'private'
+            }
+            window.dispatchEvent(new CustomEvent('videoProcessingComplete', {
+              detail: { video: privateVideo }
+            }))
+            return;
           }
-          localStorage.setItem(`video_not_found_${videoId}`, JSON.stringify(notFoundCache))
           
-          // Remove from processing videos
-          const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
-          const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
-          localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
-          return
+          // Handle 404 Not Found
+          if (error.response?.status === 404) {
+            // Cache the 404 response
+            const notFoundCache = {
+              id: videoId,
+              timestamp: Date.now()
+            }
+            localStorage.setItem(`video_not_found_${videoId}`, JSON.stringify(notFoundCache))
+            
+            // Remove from processing videos
+            const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
+            const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
+            localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+            return
+          }
         }
         
         attempts++
@@ -253,14 +330,14 @@ export const VideoService = {
     }
   },
 
-  async updateVideo(videoId: string, data: { title?: string; description?: string }): Promise<Video> {
-    try {
-      const response = await api.patch(`/videos/${videoId}`, data)
-      return response.data
-    } catch (error) {
-      console.error('Error updating video:', error)
-      throw error
-    }
+  async updateVideo(videoId: string, data: { 
+    title?: string; 
+    description?: string;
+    visibility?: 'public' | 'unlisted' | 'private';
+    videoType?: string;
+  }): Promise<Video> {
+    const { data: updatedVideo } = await api.patch<Video>(`/videos/${videoId}`, data)
+    return updatedVideo
   },
 
   async addView(videoId: string): Promise<number> {
@@ -311,5 +388,24 @@ export const VideoService = {
   async getLikeStatus(videoId: string): Promise<{ status: 'like' | 'dislike' | null }> {
     const { data } = await api.get(`/videos/${videoId}/like-status`)
     return data
-  }
+  },
+
+  async getUserVideos(userId: string): Promise<Video[]> {
+    try {
+      if (!userId) {
+        return [];
+      }
+      
+      // Use server-side filtering by passing userId as a query parameter
+      const { data } = await api.get<VideoResponse>('/videos', {
+        params: { userId }
+      });
+      
+      // Return the videos array
+      return Array.isArray(data) ? data : data.data || [];
+    } catch (error) {
+      console.error('Error fetching user videos:', error);
+      throw error;
+    }
+  },
 }

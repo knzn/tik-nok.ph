@@ -25,14 +25,42 @@ interface AuthState {
   checkAuth: () => Promise<void>
 }
 
+// Initialize from localStorage to ensure consistency
+const getInitialState = () => {
+  try {
+    const token = localStorage.getItem('token')
+    const userJson = localStorage.getItem('user')
+    const user = userJson ? JSON.parse(userJson) : null
+    
+    console.log('Auth store initialization:', {
+      hasToken: !!token,
+      hasUser: !!user,
+      userId: user?.id
+    })
+    
+    return {
+      token,
+      user,
+      isAuthenticated: !!(token && user),
+      isLoading: false
+    }
+  } catch (error) {
+    console.error('Error initializing auth state from localStorage:', error)
+    return {
+      token: null,
+      user: null,
+      isAuthenticated: false,
+      isLoading: false
+    }
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isLoading: true,
+      ...getInitialState(),
       setAuth: (token, user) => {
+        console.log('Setting auth:', { userId: user.id, hasToken: !!token })
         set({ user, token, isAuthenticated: true })
         // Also set in localStorage for API interceptor
         localStorage.setItem('token', token)
@@ -41,17 +69,22 @@ export const useAuthStore = create<AuthState>()(
       updateUser: async (userData) => {
         try {
           set((state) => ({
-            user: { ...state.user, ...userData },
-            isAuthenticated: true
+            user: state.user ? { ...state.user, ...userData } : null,
+            isAuthenticated: !!state.user
           }))
-          // Force a state update
-          set((state) => ({ ...state }))
+          
+          // Update localStorage to keep in sync
+          const updatedUser = useAuthStore.getState().user
+          if (updatedUser) {
+            localStorage.setItem('user', JSON.stringify(updatedUser))
+          }
         } catch (error) {
           console.error('Failed to update user:', error)
           throw error
         }
       },
       logout: () => {
+        console.log('Logging out')
         set({ user: null, token: null, isAuthenticated: false })
         localStorage.removeItem('token')
         localStorage.removeItem('user')
@@ -60,17 +93,34 @@ export const useAuthStore = create<AuthState>()(
         try {
           set({ isLoading: true })
           const response = await api.get('/auth/me')
+          
+          const token = localStorage.getItem('token')
+          console.log('Auth check successful:', {
+            userId: response.data.id,
+            hasToken: !!token
+          })
+          
           set({ 
             user: response.data,
+            token: token, // Ensure token is in sync
             isAuthenticated: true,
             isLoading: false
           })
+          
+          // Update localStorage to ensure consistency
+          localStorage.setItem('user', JSON.stringify(response.data))
         } catch (error) {
+          console.error('Auth check failed:', error)
           set({ 
             user: null,
+            token: null,
             isAuthenticated: false,
             isLoading: false
           })
+          
+          // Clear localStorage on auth check failure
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
         }
       },
     }),

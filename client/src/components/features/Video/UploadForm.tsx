@@ -6,11 +6,20 @@ import { Input } from '../../ui/input'
 import { Textarea } from '../../ui/textarea'
 import { useToast } from '../../ui/use-toast'
 import { useAuthStore } from '../../../stores/authStore'
+import { RadioGroup, RadioGroupItem } from '../../ui/radio-group'
+import { Label } from '../../ui/label'
+import { InfoIcon } from 'lucide-react'
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024 // 500MB
 const SUPPORTED_FORMATS = ['video/mp4', 'video/quicktime'] // MP4 and MOV
 const MIN_DURATION = 3
 const MAX_DURATION = 120 // Changed from 60 to 120 seconds
+
+// Video type options
+const VIDEO_TYPES = ['Sparring', 'Fight']
+
+// Suggested tags
+const SUGGESTED_TAGS = ['Sweater', 'Grey', 'Boston', 'Kelso']
 
 export function UploadForm() {
   const [file, setFile] = useState<File | null>(null)
@@ -18,8 +27,10 @@ export function UploadForm() {
   const [description, setDescription] = useState('')
   const [uploading, setUploading] = useState(false)
   const [duration, setDuration] = useState(0)
-  const [category, setCategory] = useState('')
+  const [videoType, setVideoType] = useState<string>('Sparring')
   const [tags, setTags] = useState<string[]>([])
+  const [visibility, setVisibility] = useState<'public' | 'unlisted' | 'private'>('public')
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const videoRef = useRef<HTMLVideoElement>(null)
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -99,9 +110,39 @@ export function UploadForm() {
     setTags(tagArray)
   }
 
+  const toggleTag = (tag: string) => {
+    const newSelectedTags = new Set(selectedTags)
+    if (newSelectedTags.has(tag)) {
+      newSelectedTags.delete(tag)
+    } else {
+      newSelectedTags.add(tag)
+    }
+    setSelectedTags(newSelectedTags)
+    setTags(Array.from(newSelectedTags))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!file || !token) return
+
+    // Validate required fields
+    if (!title.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Title is required',
+        description: 'Please enter a title for your video'
+      })
+      return
+    }
+
+    if (!description.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Description is required',
+        description: 'Please enter a description for your video'
+      })
+      return
+    }
 
     try {
       setUploading(true)
@@ -110,8 +151,9 @@ export function UploadForm() {
       formData.append('title', title)
       formData.append('description', description)
       formData.append('duration', duration.toString())
-      formData.append('category', category)
+      formData.append('videoType', videoType)
       formData.append('tags', JSON.stringify(tags))
+      formData.append('visibility', visibility)
 
       const response = await VideoService.uploadVideo(formData)
       
@@ -168,7 +210,7 @@ export function UploadForm() {
 
       <div>
         <label className="block text-sm font-medium mb-2">
-          Title
+          Title <span className="text-red-500">*</span>
         </label>
         <Input
           value={title}
@@ -180,36 +222,100 @@ export function UploadForm() {
 
       <div>
         <label className="block text-sm font-medium mb-2">
-          Description
+          Description <span className="text-red-500">*</span>
         </label>
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Enter video description"
+          placeholder="Write what bloodline is the rooster you own in this video"
           rows={4}
+          required
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium mb-2">
-          Category
+          Video Type <span className="text-red-500">*</span>
         </label>
-        <Input
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          placeholder="Enter video category"
-        />
+        <div className="mb-1">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-6">
+            {VIDEO_TYPES.map((type) => (
+              <div 
+                key={type} 
+                className={`flex items-center space-x-3 p-3 border rounded-md cursor-pointer hover:bg-gray-100 transition-colors ${videoType === type ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white'}`}
+                onClick={() => setVideoType(type)}
+              >
+                <div className="relative flex h-6 w-6 items-center justify-center">
+                  <div className={`h-6 w-6 rounded-full border-2 ${videoType === type ? 'border-4 border-primary' : 'border-gray-300'}`}></div>
+                  {videoType === type && (
+                    <div className="absolute h-2 w-2 rounded-full bg-primary"></div>
+                  )}
+                </div>
+                <Label className="text-base font-medium cursor-pointer">{type}</Label>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          This will be used for searches
+        </p>
       </div>
 
       <div>
         <label className="block text-sm font-medium mb-2">
-          Tags
+          Tags (Optional)
         </label>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {SUGGESTED_TAGS.map((tag) => (
+            <Button
+              key={tag}
+              type="button"
+              variant={selectedTags.has(tag) ? "default" : "outline"}
+              size="sm"
+              onClick={() => toggleTag(tag)}
+              className="rounded-full"
+            >
+              #{tag}
+            </Button>
+          ))}
+        </div>
         <Input
           value={tags.join(', ')}
           onChange={handleTagsChange}
-          placeholder="Enter tags separated by commas"
+          placeholder="Enter custom tags separated by commas"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">
+          Visibility
+        </label>
+        <div className="space-y-3">
+          {[
+            { value: 'public', label: 'Public', description: 'Can be shown in home page and trending page' },
+            { value: 'unlisted', label: 'Unlisted', description: 'Cannot be shown in Home, trending and Profile (for visitors), but link can be shared and viewed by public' },
+            { value: 'private', label: 'Private', description: 'Only owner can view the video' }
+          ].map((option) => (
+            <div 
+              key={option.value}
+              className={`flex items-start space-x-3 p-3 border rounded-md cursor-pointer hover:bg-gray-100 transition-colors ${visibility === option.value ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white'}`}
+              onClick={() => setVisibility(option.value as 'public' | 'unlisted' | 'private')}
+            >
+              <div className="mt-1 relative flex h-6 w-6 items-center justify-center">
+                <div className={`h-6 w-6 rounded-full border-2 ${visibility === option.value ? 'border-4 border-primary' : 'border-gray-300'}`}></div>
+                {visibility === option.value && (
+                  <div className="absolute h-2 w-2 rounded-full bg-primary"></div>
+                )}
+              </div>
+              <div>
+                <Label className="text-base font-medium cursor-pointer">{option.label}</Label>
+                <p className="text-sm text-muted-foreground">
+                  {option.description}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Button type="submit" disabled={uploading}>

@@ -7,6 +7,8 @@ import multer from 'multer'
 import path from 'path'
 import { CommentModel } from '../models/comment.model'
 import { FollowModel } from '../../user/models/follow.model'
+import jwt from 'jsonwebtoken'
+import { config } from '../../../config/environment'
 
 interface UserDocument extends Document {
   _id: string;
@@ -68,7 +70,8 @@ export class VideoController {
         title: req.body.title,
         description: req.body.description,
         userId: req.user.id,
-        status: 'processing'
+        status: 'processing',
+        visibility: req.body.visibility || 'public'
       })
 
       // Start processing in background
@@ -92,13 +95,105 @@ export class VideoController {
   getVideo = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params
+      const userId = (req as AuthRequest).user?.id
+      
+      console.log('Get video request:', {
+        videoId: id,
+        userId: userId,
+        authHeader: req.headers.authorization ? 'Present (hidden for security)' : 'None',
+        hasAuthHeader: !!req.headers.authorization,
+        userObject: (req as AuthRequest).user ? 'Present' : 'undefined'
+      })
+      
+      // Check if auth header exists but user is undefined (token validation issue)
+      if (req.headers.authorization && !userId) {
+        console.log('WARNING: Authorization header exists but user is undefined. Possible token validation issue.')
+        
+        // Try to manually decode the token for debugging
+        try {
+          const token = req.headers.authorization.split(' ')[1]
+          console.log('Token:', token ? `${token.substring(0, 10)}... (length: ${token.length})` : 'no token')
+          
+          // Don't verify signature, just decode for debugging
+          const decoded = jwt.decode(token)
+          if (decoded && typeof decoded === 'object' && decoded.id) {
+            // Temporarily set the user ID for this request
+            (req as AuthRequest).user = {
+              id: decoded.id,
+              email: decoded.email || '',
+              username: decoded.username || ''
+            }
+          }
+        } catch (tokenError) {
+          console.error('Error decoding token:', tokenError)
+        }
+      }
+      
+      // Re-check userId after potential fallback
+      const effectiveUserId = (req as AuthRequest).user?.id;
       
       const video = await VideoModel.findById(id)
         .populate<{ userId: UserDocument }>('userId', 'username profilePicture')
 
       if (!video) {
+        console.log('Video not found:', id)
         res.status(404).json({ error: 'Video not found' })
         return
+      }
+
+      // Log the IDs being compared for debugging
+      console.log('Video details:', {
+        videoId: id,
+        videoUserId: video.userId._id,
+        videoUserIdString: video.userId._id.toString(),
+        requestUserId: effectiveUserId,
+        requestUserIdType: typeof effectiveUserId,
+        visibility: video.visibility
+      })
+
+      // Check visibility permissions
+      if (video.visibility === 'private') {
+        console.log('Private video access check')
+        
+        // For private videos, check if the user is authenticated and is the owner
+        if (!effectiveUserId) {
+          // User is not authenticated
+          console.log('Access denied - user not authenticated')
+          res.status(403).json({ 
+            error: 'Access denied', 
+            message: 'This video is private. Please log in to view it.',
+            redirectIn: 5 // Redirect in 5 seconds
+          })
+          return
+        }
+        
+        // Check if the user is the owner of the video - compare string representations of IDs
+        const videoOwnerId = video.userId._id.toString()
+        
+        // Try to match the IDs in different formats
+        const isOwner = 
+          videoOwnerId === effectiveUserId || 
+          videoOwnerId === effectiveUserId?.toString();
+        
+        if (!isOwner) {
+          console.log('Access denied - IDs do not match:', {
+            videoOwnerId,
+            userId: effectiveUserId,
+            videoOwnerIdType: typeof videoOwnerId,
+            userIdType: typeof effectiveUserId,
+            comparison1: videoOwnerId === effectiveUserId,
+            comparison2: videoOwnerId === effectiveUserId?.toString()
+          });
+          
+          res.status(403).json({ 
+            error: 'Access denied', 
+            message: 'This video is private and can only be viewed by the owner.',
+            redirectIn: 5 // Redirect in 5 seconds
+          })
+          return
+        }
+        
+        console.log('Access granted - user is owner')
       }
 
       // Get follower count for video owner
@@ -127,13 +222,49 @@ export class VideoController {
 
   getVideos = async (req: Request, res: Response): Promise<void> => {
     try {
-      const videos = await VideoModel.find()
-        .populate('userId', 'username profilePicture')
-        .sort({ createdAt: -1 })
+      const { userId: queryUserId } = req.query;
+      const currentUserId = (req as AuthRequest).user?.id;
       
-      res.json(videos)
+      console.log('Get videos request:', {
+        queryUserId: queryUserId || 'none',
+        currentUserId: currentUserId || 'not authenticated',
+        isProfileView: !!queryUserId,
+        isOwnProfile: queryUserId === currentUserId
+      });
+      
+      // Create filter object based on query parameters
+      const filter: any = {};
+      
+      // Filter by userId if provided
+      if (queryUserId) {
+        filter.userId = queryUserId;
+      }
+      
+      // Handle visibility restrictions
+      if (queryUserId && queryUserId === currentUserId) {
+        // User can see all their own videos
+        console.log('User viewing their own profile - showing all videos');
+      } else if (queryUserId) {
+        // Viewing someone else's profile - show only public videos
+        console.log('Viewing another user profile - showing only public videos');
+        filter.visibility = 'public';
+      } else {
+        // Home page or general listing - show only public videos
+        console.log('Home page view - showing only public videos');
+        filter.visibility = 'public';
+      }
+      
+      console.log('Video filter:', filter);
+      
+      const videos = await VideoModel.find(filter)
+        .populate('userId', 'username profilePicture')
+        .sort({ createdAt: -1 });
+      
+      console.log(`Returning ${videos.length} videos`);
+      res.json(videos);
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' })
+      console.error('Get videos error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
@@ -141,6 +272,15 @@ export class VideoController {
     try {
       const { type } = req.params
       const limit = 20
+      const currentUserId = (req as AuthRequest).user?.id
+
+      console.log('Getting top videos:', {
+        type,
+        currentUserId: currentUserId || 'not authenticated'
+      })
+
+      // Add visibility filter to only show public videos
+      const visibilityMatch = { visibility: 'public' }
 
       let videos
 
@@ -148,6 +288,8 @@ export class VideoController {
         case 'liked':
           // Get videos with most likes
           videos = await VideoModel.aggregate([
+            // First match to filter by visibility
+            { $match: visibilityMatch },
             {
               $lookup: {
                 from: 'likes',
@@ -195,6 +337,8 @@ export class VideoController {
         case 'viewed':
           // Get most viewed videos
           videos = await VideoModel.aggregate([
+            // First match to filter by visibility
+            { $match: visibilityMatch },
             {
               $lookup: {
                 from: 'likes',
@@ -242,6 +386,8 @@ export class VideoController {
         case 'commented':
           // Get videos with most comments
           videos = await VideoModel.aggregate([
+            // First match to filter by visibility
+            { $match: visibilityMatch },
             {
               $lookup: {
                 from: 'comments',
@@ -274,6 +420,7 @@ export class VideoController {
                 thumbnailUrl: 1,
                 hlsUrl: 1,
                 views: 1,
+                likes: 1,
                 createdAt: 1,
                 userId: {
                   _id: '$userDetails._id',
@@ -298,6 +445,7 @@ export class VideoController {
         status: 'ready' as const
       }))
 
+      console.log(`Returning ${transformedVideos.length} top ${type} videos`)
       res.json(transformedVideos)
     } catch (error) {
       console.error('Get top videos error:', error)

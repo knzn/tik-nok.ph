@@ -16,6 +16,9 @@ export interface IVideo extends Document {
   processingStage: 'initializing' | 'metadata' | 'transcoding' | 'cleanup' | 'ready' | 'failed'
   error?: string
   quality?: string[]
+  videoType?: string
+  visibility?: 'public' | 'unlisted' | 'private'
+  tags?: string[]
   createdAt: Date
   updatedAt: Date
 }
@@ -52,6 +55,13 @@ export const VideoModel = mongoose.models[MODEL_NAME] ||
     },
     error: String,
     quality: [String],
+    videoType: { type: String, default: '' },
+    visibility: { 
+      type: String, 
+      enum: ['public', 'unlisted', 'private'],
+      default: 'public'
+    },
+    tags: [String],
   }, {
     timestamps: true
   })) 

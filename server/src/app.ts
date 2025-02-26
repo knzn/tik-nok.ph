@@ -42,7 +42,10 @@ QueueService.init()
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(corsMiddleware)
-app.use(helmet())
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false
+}))
 app.use(morgan('dev'))
 
 // Rate limiting
@@ -68,8 +71,17 @@ if (!fs.existsSync(profilesDir)) {
 }
 
 // Serve static files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
-app.use('/public', express.static(path.join(__dirname, '../public')))
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
+
+app.use('/public', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../public')));
 
 // Serve HLS files with correct MIME type and bypass rate limiting
 app.use('/hls', (req, res, next) => {
@@ -80,12 +92,17 @@ app.use('/hls', (req, res, next) => {
   }
   // Enable CORS for video files
   res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
   next()
 })
 
 // Serve static files - these routes bypass rate limiting
 app.use('/hls', express.static(path.join(__dirname, '../public/hls')))
-app.use('/thumbnails', express.static(path.join(__dirname, '../public/thumbnails')))
+app.use('/thumbnails', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../public/thumbnails')))
 
 // API routes
 app.use('/api/auth', authRoutes)

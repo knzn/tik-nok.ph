@@ -16,6 +16,7 @@ export interface Video {
   dislikes?: number
   comments?: number
   status: 'processing' | 'ready' | 'failed' | 'public' | 'private'
+  visibility?: 'public' | 'unlisted' | 'private'
   category?: string
   tags?: string[]
   quality?: string[]

@@ -1,6 +1,13 @@
 import dotenv from 'dotenv'
 dotenv.config()
 
+// Debug environment variables
+console.log('Environment variables loaded:')
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set (value hidden for security)' : 'Not set')
+console.log('PORT:', process.env.PORT)
+console.log('REDIS_HOST:', process.env.REDIS_HOST)
+console.log('REDIS_PORT:', process.env.REDIS_PORT)
+
 export const config = {
   port: process.env.PORT || 3000,
   mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/video-app',

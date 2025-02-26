@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../../../types/video.types'
 import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
+import { Lock, Eye, EyeOff } from 'lucide-react'
 
 interface VideoCardProps {
   video: Video
@@ -47,6 +48,10 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
     else window.location.href = `/video/${videoId}`
   }
 
+  // Determine if video is private or unlisted
+  const isPrivate = video.visibility === 'private'
+  const isUnlisted = video.visibility === 'unlisted'
+
   return (
     <div 
       className={`group cursor-pointer overflow-hidden ${compact ? 'mb-1.5' : 'mb-3'}`}
@@ -59,13 +64,28 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
           <img 
             src={video.thumbnailUrl} 
             alt={video.title}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover ${isPrivate ? 'opacity-80' : ''}`}
           />
           
           {/* Duration badge */}
           {video.duration && (
             <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 py-0.5 rounded">
               {video.duration}
+            </div>
+          )}
+
+          {/* Visibility indicators */}
+          {isPrivate && (
+            <div className="absolute top-1 right-1 bg-red-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
+              <Lock className="w-3 h-3 mr-1" />
+              <span>Private</span>
+            </div>
+          )}
+          
+          {isUnlisted && (
+            <div className="absolute top-1 right-1 bg-yellow-500/90 text-white text-xs px-1.5 py-0.5 rounded-sm flex items-center">
+              <EyeOff className="w-3 h-3 mr-1" />
+              <span>Unlisted</span>
             </div>
           )}
         </div>
@@ -84,10 +104,21 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
           
           {/* Text content */}
           <div className="flex-1 min-w-0">
-            {/* Title */}
-            <h3 className={`${compact ? 'text-sm' : 'text-base'} font-semibold tracking-tight line-clamp-2 text-gray-900 dark:text-gray-50 leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400`}>
-              {video.title}
-            </h3>
+            {/* Title with visibility indicator for compact view */}
+            <div className="flex items-center">
+              <h3 className={`${compact ? 'text-sm' : 'text-base'} font-semibold tracking-tight line-clamp-2 text-gray-900 dark:text-gray-50 leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 flex-1`}>
+                {video.title}
+              </h3>
+              
+              {/* Small visibility indicators for compact view */}
+              {compact && isPrivate && (
+                <Lock className="w-3 h-3 text-red-500 ml-1 flex-shrink-0" />
+              )}
+              
+              {compact && isUnlisted && (
+                <EyeOff className="w-3 h-3 text-yellow-500 ml-1 flex-shrink-0" />
+              )}
+            </div>
             
             {/* Username */}
             <Link 

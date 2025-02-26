@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { VideoService } from '@/services/video.service'
-import { useToast } from '@/components/ui/use-toast'
+import { VideoService } from '../../../services/video.service'
+import { useToast } from '../../../components/ui/use-toast'
 import { Bell } from 'lucide-react'
 import axios from 'axios'
 
@@ -128,19 +128,38 @@ export function VideoProcessingTracker() {
           if (!pollingRef.current[video.id]) {
             pollingRef.current[video.id] = true
             VideoService.pollVideoStatus(video.id)
-              .catch(error => {
-                if (axios.isAxiosError(error) && error.response?.status === 404) {
-                  // Remove this video from processing list immediately
-                  const updatedVideos = processingVideos.filter(v => v.id !== video.id)
-                  setProcessingVideos(updatedVideos)
-                  localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
-                  
-                  // Cache the 404 response
-                  const notFoundCache = {
-                    id: video.id,
-                    timestamp: Date.now()
+              .catch((error: unknown) => {
+                if (axios.isAxiosError(error)) {
+                  // Handle 403 Forbidden (private video)
+                  if (error.response?.status === 403) {
+                    // Remove this video from processing list - it's ready but private
+                    const updatedVideos = processingVideos.filter(v => v.id !== video.id)
+                    setProcessingVideos(updatedVideos)
+                    localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+                    
+                    // Show a toast notification for private video
+                    toast({
+                      title: 'Private Video Ready',
+                      description: `Your private video "${video.title}" is now ready.`,
+                      duration: 5000,
+                    })
+                    return
                   }
-                  localStorage.setItem(`video_not_found_${video.id}`, JSON.stringify(notFoundCache))
+                  
+                  // Handle 404 Not Found
+                  if (error.response?.status === 404) {
+                    // Remove this video from processing list immediately
+                    const updatedVideos = processingVideos.filter(v => v.id !== video.id)
+                    setProcessingVideos(updatedVideos)
+                    localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+                    
+                    // Cache the 404 response
+                    const notFoundCache = {
+                      id: video.id,
+                      timestamp: Date.now()
+                    }
+                    localStorage.setItem(`video_not_found_${video.id}`, JSON.stringify(notFoundCache))
+                  }
                 }
               })
           }

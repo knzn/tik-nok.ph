@@ -5,8 +5,15 @@ import { Button } from '../components/ui/button'
 import { ProfileSetupModal } from '../components/profile/ProfileSetupModal'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 import { UpdateProfilePictureModal } from '../components/profile/UpdateProfilePictureModal'
-import { Camera } from 'lucide-react'
+import { Camera, Grid, List, Video, Users, Heart, MessageSquare } from 'lucide-react'
 import { api, followUser, unfollowUser, checkFollowStatus } from '../lib/api'
+import { VideoService } from '../services/video.service'
+import { useQuery } from '@tanstack/react-query'
+import { LoadingSpinner } from '../components/ui/LoadingSpinner'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card'
+import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar'
+import { Separator } from '../components/ui/separator'
+import { ScrollArea } from '../components/ui/scroll-area'
 
 // Add this helper function at the top of the file
 const addCacheBuster = (url: string) => {
@@ -94,150 +101,264 @@ export function ProfilePage() {
 
   useEffect(() => {
     const checkFollow = async () => {
-      if (!isOwnProfile && user && profileData?._id) {
+      if (!isOwnProfile && user && (profileData?._id || profileData?.id)) {
         try {
-          const status = await checkFollowStatus(profileData._id)
-          setIsFollowing(status)
+          const userId = profileData._id || profileData.id;
+          const status = await checkFollowStatus(userId);
+          setIsFollowing(status);
         } catch (error) {
-          console.error('Failed to check follow status:', error)
+          console.error('Failed to check follow status:', error);
         }
       }
-    }
+    };
 
-    checkFollow()
-  }, [isOwnProfile, user, profileData])
+    checkFollow();
+  }, [isOwnProfile, user, profileData]);
 
   const handleFollow = async () => {
     try {
-      await followUser(profileData._id)
-      setIsFollowing(true)
-      setFollowersCount(prev => prev + 1)
+      const userId = profileData._id || profileData.id;
+      await followUser(userId);
+      setIsFollowing(true);
+      setFollowersCount(prev => prev + 1);
     } catch (error) {
-      console.error('Failed to follow:', error)
+      console.error('Failed to follow:', error);
     }
-  }
+  };
 
   const handleUnfollow = async () => {
     try {
-      await unfollowUser(profileData._id)
-      setIsFollowing(false)
-      setFollowersCount(prev => prev - 1)
+      const userId = profileData._id || profileData.id;
+      await unfollowUser(userId);
+      setIsFollowing(false);
+      setFollowersCount(prev => prev - 1);
     } catch (error) {
-      console.error('Failed to unfollow:', error)
+      console.error('Failed to unfollow:', error);
     }
-  }
+  };
+
+  // Fetch user videos
+  const { data: userVideos, isLoading: loadingVideos } = useQuery({
+    queryKey: ['userVideos', profileData?._id || profileData?.id],
+    queryFn: async () => {
+      if (!profileData?._id && !profileData?.id) return [];
+      
+      // Use either _id or id, whichever is available
+      const userId = profileData._id || profileData.id;
+      console.log('Fetching videos for user ID:', userId);
+      
+      try {
+        const videos = await VideoService.getUserVideos(userId);
+        console.log('Fetched videos:', videos);
+        
+        // Ensure we're only returning videos that belong to this user
+        // This is a safety check in case the server doesn't filter properly
+        const filteredVideos = videos.filter(video => {
+          // Handle different possible structures of userId
+          if (typeof video.userId === 'string') {
+            return video.userId === userId;
+          } else if (video.userId && typeof video.userId === 'object') {
+            // Check if userId is an object with _id property
+            return video.userId._id === userId;
+          }
+          return false;
+        });
+        
+        console.log('Filtered videos for user:', filteredVideos.length);
+        return filteredVideos;
+      } catch (error) {
+        console.error('Error fetching user videos:', error);
+        return [];
+      }
+    },
+    enabled: !!(profileData?._id || profileData?.id),
+  });
 
   const displayData = isOwnProfile ? user : profileData
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <LoadingSpinner size={40} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Profile Info Section - Centered with max-width */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-4 sm:pt-6 md:pt-8">
-        {/* Centered Profile Picture with Update Button */}
-        <div className="flex flex-col items-center mb-6 sm:mb-8">
-          <div className="relative">
-            <div className="w-28 h-28 sm:w-36 sm:h-36 md:w-48 md:h-48 rounded-full border-4 border-background bg-gray-200 overflow-hidden mb-3 sm:mb-4">
-              {displayData?.profilePicture ? (
-                <img
-                  src={displayData.profilePicture}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                  key={imageVersion}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null;
-                    target.src = '';
-                  }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-3xl sm:text-4xl md:text-6xl">👤</span>
-                </div>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Profile Header */}
+        <div className="flex flex-col md:flex-row gap-8 mb-8">
+          {/* Profile Picture Section */}
+          <div className="flex flex-col items-center">
+            <div className="relative">
+              <Avatar className="w-32 h-32 md:w-40 md:h-40 border-4 border-background">
+                {displayData?.profilePicture ? (
+                  <AvatarImage 
+                    src={getImageUrl(displayData.profilePicture)} 
+                    alt={displayData?.username} 
+                    key={imageVersion}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = '';
+                    }}
+                  />
+                ) : (
+                  <AvatarFallback className="text-4xl">
+                    {displayData?.username?.charAt(0).toUpperCase() || '👤'}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+              
+              {isOwnProfile && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="absolute bottom-0 right-0 rounded-full"
+                  onClick={() => setShowProfilePictureModal(true)}
+                >
+                  edit
+                </Button>
               )}
             </div>
-            {isOwnProfile && (
+
+            {isOwnProfile ? (
               <Button
                 variant="outline"
-                size="icon"
-                className="absolute bottom-4 sm:bottom-6 right-0 rounded-full w-8 h-8 sm:w-10 sm:h-10"
-                onClick={() => setShowProfilePictureModal(true)}
+                size="sm"
+                className="mt-4"
+                onClick={() => setShowEditModal(true)}
               >
-                <Camera className="h-3 w-3 sm:h-4 sm:w-4" />
+                Edit Profile
+              </Button>
+            ) : (
+              <Button
+                variant={isFollowing ? "outline" : "default"}
+                size="sm"
+                className="mt-4"
+                onClick={isFollowing ? handleUnfollow : handleFollow}
+              >
+                {isFollowing ? "Unfollow" : "Follow"}
               </Button>
             )}
           </div>
 
-          {/* Edit Profile Button - Only show for own profile */}
-          {isOwnProfile && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2 sm:mt-3 text-xs sm:text-sm"
-              onClick={() => setShowEditModal(true)}
-            >
-              Edit Profile
-            </Button>
-          )}
-
-          {!isOwnProfile && user && (
-            <Button
-              variant={isFollowing ? "outline" : "default"}
-              size="sm"
-              className="mt-2 sm:mt-3 text-xs sm:text-sm"
-              onClick={isFollowing ? handleUnfollow : handleFollow}
-            >
-              {isFollowing ? "Unfollow" : "Follow"}
-            </Button>
-          )}
+          {/* Profile Info */}
+          <div className="flex-1">
+            <div className="space-y-2">
+              <h1 className="text-2xl md:text-3xl font-bold">{displayData?.gamefarmName || "Gamefarm"}</h1>
+              <p className="text-muted-foreground">@{displayData?.username}</p>
+              
+              {/* Stats */}
+              <div className="flex gap-6 mt-4">
+                <div className="flex flex-col items-center">
+                  <span className="text-xl font-bold">{followersCount}</span>
+                  <span className="text-sm text-muted-foreground">Followers</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-xl font-bold">{followingCount}</span>
+                  <span className="text-sm text-muted-foreground">Following</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-xl font-bold">{userVideos?.length || 0}</span>
+                  <span className="text-sm text-muted-foreground">Videos</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Profile Details Card */}
-        <div className="bg-card rounded-xl p-4 sm:p-6 md:p-8 shadow-lg">
-          <div className="space-y-6 sm:space-y-8">
-            <div className="text-center">
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">{displayData?.gamefarmName || "Gamefarm"}</h1>
-              <p className="text-base sm:text-lg text-muted-foreground mt-1 sm:mt-2">@{displayData?.username}</p>
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Profile Details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <h3 className="font-medium text-sm text-muted-foreground mb-1">Location</h3>
+                <p>{displayData?.address || "Not specified"}</p>
+              </div>
+              <div>
+                <h3 className="font-medium text-sm text-muted-foreground mb-1">Contact</h3>
+                <p>{displayData?.contactNumber || "Not specified"}</p>
+              </div>
+              <div>
+                <h3 className="font-medium text-sm text-muted-foreground mb-1">Facebook</h3>
+                {displayData?.facebookProfile ? (
+                  <a 
+                    href={displayData.facebookProfile} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-primary hover:underline"
+                  >
+                    Visit Facebook Profile
+                  </a>
+                ) : (
+                  <p>Not specified</p>
+                )}
+              </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold">Location</h2>
-                <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">{displayData?.address || "Not specified"}</p>
+        {/* Tabs for Content */}
+        <div className="w-full">
+          <h2 className="text-xl font-semibold mb-4">
+            {isOwnProfile ? "Your Videos" : `${displayData?.username}'s Videos`}
+          </h2>
+          
+          {/* Videos Content */}
+          <div className="space-y-4">
+            {loadingVideos ? (
+              <div className="flex justify-center py-10">
+                <LoadingSpinner size={32} />
               </div>
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold">Contact</h2>
-                <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">{displayData?.contactNumber || "Not specified"}</p>
+            ) : userVideos && userVideos.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {userVideos.map((video) => {
+                  // Ensure we have a valid ID for the video
+                  const videoId = video.id || video._id;
+                  return (
+                    <Card 
+                      key={videoId} 
+                      className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow" 
+                      onClick={() => navigate(`/video/${videoId}`)}
+                    >
+                      <div className="aspect-video relative">
+                        {video.thumbnailUrl ? (
+                          <img 
+                            src={video.thumbnailUrl} 
+                            alt={video.title} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-muted flex items-center justify-center">
+                            <Video className="h-10 w-10 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <CardContent className="p-3">
+                        <h3 className="font-medium line-clamp-1">{video.title}</h3>
+                        <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3" /> {video.views || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Heart className="h-3 w-3" /> {video.likes || 0}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
-              <div>
-                <h2 className="text-lg sm:text-xl font-semibold">Facebook</h2>
-                <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
-                  {displayData?.facebookProfile ? (
-                    <a href={displayData.facebookProfile} target="_blank" rel="noopener noreferrer" 
-                       className="text-primary hover:underline">
-                      Visit Facebook Profile
-                    </a>
-                  ) : (
-                    "Not specified"
-                  )}
-                </p>
+            ) : (
+              <div className="text-center py-10 text-muted-foreground">
+                No videos found. {isOwnProfile ? "Upload your first video!" : "This user hasn't uploaded any videos yet."}
               </div>
-            </div>
-
-            {/* Stats */}
-            <div className="flex justify-center gap-6 sm:gap-8 md:gap-12 pt-4 sm:pt-6 border-t">
-              <div>
-                <span className="text-xl sm:text-2xl font-bold">{followersCount}</span>
-                <span className="text-sm sm:text-base text-muted-foreground ml-1 sm:ml-2">followers</span>
-              </div>
-              <div>
-                <span className="text-xl sm:text-2xl font-bold">{followingCount}</span>
-                <span className="text-sm sm:text-base text-muted-foreground ml-1 sm:ml-2">following</span>
-              </div>
-              <div>
-                <span className="text-xl sm:text-2xl font-bold">37K</span>
-                <span className="text-sm sm:text-base text-muted-foreground ml-1 sm:ml-2">likes</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

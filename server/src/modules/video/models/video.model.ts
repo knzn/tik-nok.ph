@@ -8,6 +8,7 @@ interface IVideo {
   thumbnailUrl?: string
   quality: string[]
   status: 'processing' | 'ready' | 'failed'
+  visibility: 'public' | 'unlisted' | 'private'
   createdAt: Date
   updatedAt: Date
   duration: number
@@ -37,6 +38,11 @@ const videoSchema = new Schema<IVideo>(
       type: String,
       enum: ['processing', 'ready', 'failed'],
       default: 'processing'
+    },
+    visibility: {
+      type: String,
+      enum: ['public', 'unlisted', 'private'],
+      default: 'public'
     },
     views: {
       type: Number,

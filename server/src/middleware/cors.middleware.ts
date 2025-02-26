@@ -5,5 +5,6 @@ export const corsMiddleware = cors({
   origin: (origin, callback) => {
     callback(null, true) // Allow all origins in development
   },
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type']
 }) 

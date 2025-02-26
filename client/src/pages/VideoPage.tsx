@@ -11,13 +11,19 @@ import type { Video } from '../types/video.types'
 import { ScrollArea } from "../components/ui/scroll-area"
 import { Card } from "../components/ui/card"
 import { VideoDetail } from '../components/features/Video/VideoDetail'
+import { PrivateVideoMessage } from '../components/features/Video/PrivateVideoMessage'
+import { useAuthStore } from '../stores/authStore'
 
 export const VideoPage = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { isAuthenticated, token, user } = useAuthStore()
   const [video, setVideo] = useState<Video | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [privateMessage, setPrivateMessage] = useState('')
+  const [redirectIn, setRedirectIn] = useState(5)
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
 
   useEffect(() => {
@@ -27,7 +33,44 @@ export const VideoPage = () => {
       try {
         setLoading(true)
         setError(null)
+        
+        // Log authentication status
+        console.log('Authentication status:', {
+          isAuthenticated,
+          hasToken: !!token,
+          tokenLength: token ? token.length : 0,
+          userId: user?.id,
+          videoId: id
+        })
+        
+        // Check if we have a token but no user - this indicates a potential auth issue
+        if (token && !user) {
+          console.warn('Token exists but user is null - possible auth state inconsistency')
+          // Try to parse user from localStorage directly as a fallback
+          const userJson = localStorage.getItem('user')
+          if (userJson) {
+            try {
+              const parsedUser = JSON.parse(userJson)
+              console.log('Retrieved user from localStorage:', {
+                userId: parsedUser.id,
+                username: parsedUser.username
+              })
+            } catch (parseError) {
+              console.error('Failed to parse user from localStorage:', parseError)
+            }
+          }
+        }
+        
+        console.log('Fetching video with ID:', id)
+        
         const data = await VideoService.getVideo(id!)
+        
+        console.log('Video data received:', {
+          videoId: data?._id || data?.id,
+          userId: data?.userId?._id || data?.userId,
+          visibility: data?.visibility,
+          status: data?.status
+        })
         
         if (mounted && data) {
           setVideo(data as unknown as Video)
@@ -39,8 +82,30 @@ export const VideoPage = () => {
         }
       } catch (error: any) {
         console.error('Error fetching video:', error)
+        console.log('Error details:', {
+          status: error?.response?.status,
+          message: error?.response?.data?.message,
+          data: error?.response?.data
+        })
+        
         if (mounted) {
-          setError(error?.response?.data?.message || error?.message || 'Failed to load video')
+          // Check if it's a private video error
+          if (error?.response?.status === 403 && error?.response?.data?.message) {
+            console.log('Private video detected:', error.response.data)
+            setIsPrivate(true)
+            setPrivateMessage(error.response.data.message)
+            setRedirectIn(error.response.data.redirectIn || 5)
+            
+            // If user is not authenticated and trying to access a private video
+            if (!isAuthenticated && error.response.data.message.includes('Please log in')) {
+              console.log('Redirecting to login for private video access')
+              // Redirect to login page with return URL
+              const returnUrl = `/video/${id}`
+              navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`)
+            }
+          } else {
+            setError(error?.response?.data?.message || error?.message || 'Failed to load video')
+          }
         }
       } finally {
         if (mounted) {
@@ -56,7 +121,7 @@ export const VideoPage = () => {
     return () => {
       mounted = false
     }
-  }, [id, navigate])
+  }, [id, navigate, isAuthenticated, token, user])
 
   if (loading) {
     return (
@@ -64,6 +129,10 @@ export const VideoPage = () => {
         <LoadingSpinner size={32} />
       </div>
     )
+  }
+
+  if (isPrivate) {
+    return <PrivateVideoMessage message={privateMessage} redirectIn={redirectIn} />
   }
 
   if (error || !video) {

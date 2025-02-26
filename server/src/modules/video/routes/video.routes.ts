@@ -291,7 +291,7 @@ const deleteVideoHandler: RequestHandler = async (req, res, next) => {
 const updateVideoHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId } = req.params
-    const { title, description } = req.body
+    const { title, description, visibility } = req.body
     const userId = (req as AuthRequest).user.id
 
     const video = await VideoModel.findById(videoId)
@@ -306,11 +306,18 @@ const updateVideoHandler: RequestHandler = async (req, res, next) => {
       return
     }
 
+    // Validate visibility value if provided
+    if (visibility && !['public', 'unlisted', 'private'].includes(visibility)) {
+      res.status(400).json({ error: 'Invalid visibility value' })
+      return
+    }
+
     const updatedVideo = await VideoModel.findByIdAndUpdate(
       videoId,
       { 
         ...(title && { title }),
-        ...(description !== undefined && { description })
+        ...(description !== undefined && { description }),
+        ...(visibility && { visibility })
       },
       { new: true }
     ).populate('userId', 'username profilePicture')
