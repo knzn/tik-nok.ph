@@ -10,6 +10,7 @@ import { CommentModel } from '../models/comment.model'
 import { AuthRequest } from '../../auth/types/auth.types'
 import { Types, Document } from 'mongoose'
 import { LikeModel } from '../models/like.model'
+import { SocketService } from '../../../services/socket.service'
 
 // Create temp upload directory
 const TEMP_UPLOAD_DIR = path.resolve(process.cwd(), 'uploads', 'temp')
@@ -84,19 +85,18 @@ const addCommentHandler: RequestHandler = async (req, res, next) => {
     const authReq = req as AuthRequest
     const userId = authReq.user.id
 
-    const video = await VideoModel.findById(videoId)
-    if (!video) {
-      res.status(404).json({ error: 'Video not found' })
-      return
-    }
-
     const comment = await CommentModel.create({
       content,
       videoId,
-      userId
+      userId,
+      parentId: null
     })
 
     await comment.populate('userId', 'username profilePicture')
+    
+    // Emit real-time update
+    SocketService.notifyNewComment(videoId, comment)
+    
     res.status(201).json(comment)
   } catch (error) {
     next(error)
@@ -131,7 +131,8 @@ const getCommentsHandler: RequestHandler = async (req, res, next) => {
 const deleteCommentHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId, commentId } = req.params
-    const userId = (req as AuthRequest).user.id
+    const authReq = req as AuthRequest
+    const userId = authReq.user.id
 
     const comment = await CommentModel.findById(commentId)
     if (!comment) {
@@ -146,6 +147,10 @@ const deleteCommentHandler: RequestHandler = async (req, res, next) => {
     }
 
     await CommentModel.findByIdAndDelete(commentId)
+    
+    // Emit real-time update
+    SocketService.broadcastGlobal('comment:delete', commentId)
+    
     res.status(200).json({ message: 'Comment deleted successfully' })
   } catch (error) {
     next(error)
@@ -156,7 +161,8 @@ const updateCommentHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId, commentId } = req.params
     const { content } = req.body
-    const userId = (req as AuthRequest).user.id
+    const authReq = req as AuthRequest
+    const userId = authReq.user.id
 
     const comment = await CommentModel.findById(commentId)
     if (!comment) {
@@ -181,25 +187,28 @@ const updateCommentHandler: RequestHandler = async (req, res, next) => {
       return
     }
 
-    // Ensure userId is populated
+    // Type guard to check if userId is populated
     if (!('username' in updatedComment.userId)) {
-      res.status(500).json({ error: 'Failed to populate user data' })
-      return
+      throw new Error('Failed to populate user data')
     }
 
     // Format the response to match the frontend Comment type
-    const response = {
+    const formattedComment = {
       _id: updatedComment._id.toString(),
       content: updatedComment.content,
-      userId: {
+      user: {
         _id: updatedComment.userId._id.toString(),
         username: updatedComment.userId.username,
         profilePicture: updatedComment.userId.profilePicture
       },
+      videoId: updatedComment.videoId.toString(),
       createdAt: updatedComment.createdAt.toISOString()
     }
-
-    res.status(200).json(response)
+    
+    // Emit real-time update
+    SocketService.broadcastGlobal('comment:update', formattedComment)
+    
+    res.status(200).json(formattedComment)
   } catch (error) {
     next(error)
   }
@@ -368,14 +377,17 @@ const addReplyHandler: RequestHandler = async (req, res, next) => {
       parentId: commentId
     })
 
-    await reply.populate('userId', 'username profilePicture')
-    
     // Add reply to parent comment's replies array
     await CommentModel.findByIdAndUpdate(
       commentId,
       { $push: { replies: reply._id } }
     )
 
+    await reply.populate('userId', 'username profilePicture')
+    
+    // Emit real-time update
+    SocketService.notifyNewComment(videoId, reply)
+    
     res.status(201).json(reply)
   } catch (error) {
     next(error)

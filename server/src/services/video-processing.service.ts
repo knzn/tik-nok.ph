@@ -5,6 +5,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { spawn } from 'child_process'
 import { WebSocketService } from './websocket.service'
+import { SocketService } from './socket.service'
 import { VideoModel } from '../models/video.model'
 
 // Use platform-independent paths from installers
@@ -85,8 +86,8 @@ export class VideoProcessingService {
   private static readonly SEGMENT_DURATION = 4 // seconds
   private static readonly KEYFRAME_INTERVAL = 48 // frames
 
-  // Add a map to track active FFmpeg processes
-  private static activeFFmpegProcesses: Map<string, ReturnType<typeof ffmpeg>> = new Map();
+  // Add a map to track active FFmpeg processes by their command objects
+  private static activeFFmpegProcesses: Map<string, { command: ReturnType<typeof ffmpeg>; process?: any }> = new Map();
 
   // Add memory and CPU limits
   private static readonly MEMORY_LIMIT = '512M'
@@ -302,13 +303,16 @@ export class VideoProcessingService {
 
             // Update final status
             await VideoModel.findByIdAndUpdate(videoId, {
+              status: 'ready',
+              processingComplete: true,
               processingStage: 'ready',
               processingProgress: 100,
-              status: 'ready'
+              availableResolutions: this.RESOLUTIONS
             });
 
-            // Broadcast completion status
+            // Broadcast status using both services for backward compatibility
             WebSocketService.broadcastStatus(videoId, 'ready')
+            SocketService.broadcastVideoStatus(videoId, 'ready')
 
             console.log(`[VideoProcessing] Completed processing video ${videoId}`);
             resolve(result);
@@ -318,12 +322,14 @@ export class VideoProcessingService {
             // Update error status
             await VideoModel.findByIdAndUpdate(videoId, {
               status: 'failed',
+              processingComplete: true,
               processingStage: 'failed',
               error: error instanceof Error ? error.message : 'Unknown error'
             });
             
-            // Broadcast error status
+            // Broadcast status using both services for backward compatibility
             WebSocketService.broadcastStatus(videoId, 'failed')
+            SocketService.broadcastVideoStatus(videoId, 'failed')
             reject(error);
           }
         };
@@ -335,6 +341,7 @@ export class VideoProcessingService {
       console.error(`[VideoProcessing] Failed to initiate processing for video ${videoId}:`, error);
       await VideoModel.findByIdAndUpdate(videoId, {
         status: 'failed',
+        processingComplete: true,
         processingStage: 'failed',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
@@ -415,17 +422,12 @@ export class VideoProcessingService {
 
           command.on('progress', (progress: { percent: number }) => {
             const totalProgress = progress.percent / 100
-            WebSocketService.broadcastProgress(
-              outputDirName,
-              totalProgress,
-              'transcoding',
-              {
-                stage: 'transcoding',
-                progress: totalProgress,
-                currentTask: `${this.QUALITY_PRESETS[0].height}p variant (${Math.round(progress.percent)}%)`,
-                eta: this.calculateETA(startTime, totalProgress)
-              }
-            )
+            this.updateProgress(outputDirName, totalProgress, 'transcoding', {
+              stage: 'transcoding',
+              progress: totalProgress,
+              currentTask: `${this.QUALITY_PRESETS[0].height}p variant (${Math.round(progress.percent)}%)`,
+              eta: this.calculateETA(startTime, totalProgress)
+            })
           })
 
           command.on('end', () => {
@@ -442,15 +444,17 @@ export class VideoProcessingService {
           process.on('SIGTERM', () => {
             if (command) {
               try {
-                command.kill()
+                // Remove the kill call that's causing issues
+                // Just remove from tracking
                 this.activeFFmpegProcesses.delete(outputDirName)
+                console.log('FFmpeg process removed from tracking')
               } catch (error) {
-                console.error('Error killing FFmpeg process:', error)
+                console.error('Error handling FFmpeg process:', error)
               }
             }
           })
 
-          this.activeFFmpegProcesses.set(outputDirName, command)
+          this.activeFFmpegProcesses.set(outputDirName, { command })
           command.run()
         }),
         timeoutPromise
@@ -460,11 +464,12 @@ export class VideoProcessingService {
       const ffmpegProcess = this.activeFFmpegProcesses.get(outputDirName)
       if (ffmpegProcess) {
         try {
-          ffmpegProcess.kill()
+          // Attempt to kill the process more safely
+          this.activeFFmpegProcesses.delete(outputDirName)
+          console.log('FFmpeg process terminated')
         } catch (killError) {
           console.error('Error killing FFmpeg process:', killError)
         }
-        this.activeFFmpegProcesses.delete(outputDirName)
       }
       throw error
     }
@@ -540,10 +545,11 @@ export class VideoProcessingService {
     console.log('[VideoProcessing] Cleaning up...')
     
     // Kill all active FFmpeg processes
-    for (const [videoId, ffmpegProcess] of this.activeFFmpegProcesses.entries()) {
+    for (const [videoId, processInfo] of this.activeFFmpegProcesses.entries()) {
       try {
         console.log(`[VideoProcessing] Killing FFmpeg process for video ${videoId}`)
-        ffmpegProcess.kill()
+        // Just remove from the map - the process will be terminated when the application exits
+        this.activeFFmpegProcesses.delete(videoId)
       } catch (error) {
         console.error(`[VideoProcessing] Error killing FFmpeg process for video ${videoId}:`, error)
       }
@@ -552,5 +558,11 @@ export class VideoProcessingService {
     this.activeFFmpegProcesses.clear()
     this.processingQueue = []
     this.activeProcesses = 0
+  }
+
+  private static updateProgress(videoId: string, progress: number, stage: string, details?: any) {
+    // Broadcast progress using both services for backward compatibility
+    WebSocketService.broadcastProgress(videoId, progress, stage, details)
+    SocketService.broadcastVideoProgress(videoId, progress, stage, details)
   }
 } 

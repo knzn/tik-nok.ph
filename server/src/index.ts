@@ -1,5 +1,6 @@
 import { createServer } from 'http'
 import app from './app'
+import { SocketService } from './services/socket.service'
 import { WebSocketService } from './services/websocket.service'
 import { VideoProcessingService } from './services/video-processing.service'
 import mongoose from 'mongoose'
@@ -7,7 +8,10 @@ import { config } from './config/environment'
 
 const server = createServer(app)
 
-// Initialize WebSocket service
+// Initialize Socket.IO service
+SocketService.init(server)
+
+// Keep WebSocketService for backward compatibility (will be removed later)
 WebSocketService.init(server)
 
 // Graceful shutdown handler

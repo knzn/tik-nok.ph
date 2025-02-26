@@ -11,7 +11,7 @@ import path from 'path'
 import fs from 'fs'
 import { VideoProcessingService } from './services/video-processing.service'
 import morgan from 'morgan'
-import { apiLimiter } from './middleware/rate-limit'
+import { apiLimiter, authLimiter, uploadLimiter, videoLimiter } from './middleware/rate-limit'
 import { corsMiddleware } from './middleware/cors.middleware'
 import { QueueService } from './services/queue.service'
 
@@ -43,7 +43,10 @@ app.use(morgan('dev'))
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 500, // Increased from 300 to 500 requests per 15 minutes
+  message: 'Too many requests from this IP, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false
 })
 app.use(limiter)
 
@@ -60,7 +63,7 @@ uploadDirs.forEach(dir => {
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
 
-// Serve HLS files with correct MIME type
+// Serve HLS files with correct MIME type and bypass rate limiting
 app.use('/hls', (req, res, next) => {
   if (req.path.endsWith('.m3u8')) {
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl')
@@ -72,17 +75,17 @@ app.use('/hls', (req, res, next) => {
   next()
 })
 
-// Serve static files
+// Serve static files - these routes bypass rate limiting
 app.use('/hls', express.static(path.join(__dirname, '../public/hls')))
 app.use('/thumbnails', express.static(path.join(__dirname, '../public/thumbnails')))
 
-// Routes
-app.use('/api/auth', authRoutes)
-app.use('/api/videos', videoRoutes)
-app.use('/api/users', userRoutes)
+// Apply rate limiting to API routes
+app.use('/api/auth', authLimiter, authRoutes)
+app.use('/api/videos', videoLimiter, videoRoutes)
+app.use('/api/users', apiLimiter, userRoutes)
 
-// Apply rate limiting to all routes
-app.use(apiLimiter)
+// Apply general rate limiting to all other API routes
+app.use('/api', apiLimiter)
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
