@@ -150,7 +150,7 @@ export function VideoPage() {
   }, [combinedVideos, id, currentVideo]);
 
   // Calculate relevance score for sorting
-  const getRelevanceScore = (video: VideoBase, category?: string, tags?: string[]) => {
+  const getRelevanceScore = useCallback((video: VideoBase, category?: string, tags?: string[]) => {
     let score = 0;
     
     // Same category is a strong signal
@@ -173,7 +173,7 @@ export function VideoPage() {
     score += Math.random() * 2;
     
     return score;
-  };
+  }, []);
 
   // Update filtered videos when combined videos or current video changes
   useEffect(() => {

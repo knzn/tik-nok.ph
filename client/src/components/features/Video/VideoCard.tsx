@@ -4,33 +4,13 @@ import type { Video } from '../../../types/video.types'
 import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
 import { Lock, Eye, EyeOff } from 'lucide-react'
 import { formatDuration } from '../../../utils/formatDuration'
+import { formatTimeAgo } from '../../../utils/formatTimeAgo'
 
 interface VideoCardProps {
   video: Video
   onVideoClick?: () => void
   compact?: boolean // Add compact prop for suggested videos sidebar
 }
-
-// Simple function to format date
-const formatTimeAgo = (dateString: string): string => {
-  try {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (isNaN(diffInSeconds)) return 'Unknown';
-    
-    if (diffInSeconds < 60) return `${diffInSeconds}s`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d`;
-    if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)}mo`;
-    
-    return `${Math.floor(diffInSeconds / 31536000)}y`;
-  } catch (error) {
-    return 'Unknown';
-  }
-};
 
 // Format video duration to MM:SS format
 // const formatDuration = (seconds: number): string => {

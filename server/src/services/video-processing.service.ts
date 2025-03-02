@@ -46,58 +46,62 @@ export class VideoProcessingService {
   private static readonly THUMBNAIL_DIR = path.resolve(process.cwd(), 'public', 'thumbnails')
   private static readonly CACHE_DIR = path.resolve(process.cwd(), 'cache', 'segments')
 
+  // Optimize resolutions based on common device sizes
   private static readonly RESOLUTIONS = [
     { height: 720, bitrate: '2500k' },
     { height: 480, bitrate: '1500k' },
     { height: 360, bitrate: '1000k' }
   ] as const
 
+  // Optimize quality presets for better balance between quality and processing speed
   private static readonly QUALITY_PRESETS: QualityPreset[] = [
     {
       name: 'high',
-      height: 1080,
-      bitrate: '4000k',
-      crf: 18,
-      preset: 'slower'
+      height: 720, // Reduced from 1080p to save processing time and storage
+      bitrate: '3000k', // Reduced from 4000k
+      crf: 22, // Increased from 18 for better compression
+      preset: 'medium' // Changed from slower to medium for faster processing
     },
     {
       name: 'medium',
-      height: 720,
-      bitrate: '2500k',
-      crf: 20,
-      preset: 'medium'
+      height: 480,
+      bitrate: '1500k', // Reduced from 2500k
+      crf: 24, // Increased from 20
+      preset: 'fast' // Changed from medium to fast
     },
     {
       name: 'low',
-      height: 480,
-      bitrate: '1000k',
-      crf: 23,
-      preset: 'veryfast'
+      height: 360,
+      bitrate: '800k', // Reduced from 1000k
+      crf: 26, // Increased from 23
+      preset: 'veryfast' // Kept as veryfast
     }
   ]
 
-  private static readonly MAX_CONCURRENT_PROCESSES = 2;
+  // Increase concurrent processes based on available system resources
+  private static readonly MAX_CONCURRENT_PROCESSES = Math.max(1, Math.min(2, Math.floor(require('os').cpus().length / 2)));
   private static processingQueue: Array<{
     videoId: string;
     task: () => Promise<void>;
   }> = [];
   private static activeProcesses = 0;
 
-  private static readonly SEGMENT_DURATION = 4 // seconds
-  private static readonly KEYFRAME_INTERVAL = 48 // frames
+  // Optimize segment duration for better streaming experience
+  private static readonly SEGMENT_DURATION = 6 // seconds (increased from 4)
+  private static readonly KEYFRAME_INTERVAL = 60 // frames (increased from 48)
 
   // Add a map to track active FFmpeg processes by their command objects
   private static activeFFmpegProcesses: Map<string, { command: ReturnType<typeof ffmpeg>; process?: any }> = new Map();
 
-  // Add memory and CPU limits
-  private static readonly MEMORY_LIMIT = '512M'
-  private static readonly CPU_USAGE = '50%'
+  // Optimize resource limits
+  private static readonly MEMORY_LIMIT = '768M' // Increased from 512M
+  private static readonly CPU_USAGE = '75%' // Increased from 50%
 
-  // Add timeout for processes
-  private static readonly PROCESS_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  // Reduce timeout for processes to prevent hanging processes
+  private static readonly PROCESS_TIMEOUT = 20 * 60 * 1000; // 20 minutes (reduced from 30)
 
-  private static readonly MAX_RETRIES = 3
-  private static readonly RETRY_DELAY = 5000 // 5 seconds
+  private static readonly MAX_RETRIES = 2 // Reduced from 3
+  private static readonly RETRY_DELAY = 3000 // Reduced from 5000
 
   static async init() {
     try {
@@ -233,9 +237,23 @@ export class VideoProcessingService {
     const totalMem = os.totalmem()
     const memoryUsage = (totalMem - freeMem) / totalMem
     
-    if (memoryUsage > 0.9) { // 90% memory usage
+    // More aggressive memory management
+    if (memoryUsage > 0.85) { // 85% memory usage (reduced from 90%)
       console.warn('System memory usage too high, pausing video processing')
       return false
+    }
+    
+    // Also check CPU usage
+    try {
+      const { loadavg } = os
+      const cpuLoad = loadavg()[0] / os.cpus().length
+      
+      if (cpuLoad > 0.8) { // 80% CPU usage
+        console.warn('CPU usage too high, pausing video processing')
+        return false
+      }
+    } catch (error) {
+      console.error('Error checking CPU usage:', error)
     }
     
     return true

@@ -1,10 +1,11 @@
 import { VideoProcessingService } from '../services/video-processing.service'
-import { Request, Response } from 'express'
+import { Request, Response, NextFunction } from 'express'
 import { promises as fs } from 'fs'
 import { ObjectId } from 'mongodb'
 import { VideoModel } from '../models/video.model'
 import { AuthRequest } from '../middleware/auth'
 import { QueueService } from '../services/queue.service'
+import mongoose from 'mongoose'
 
 export class VideoController {
   static async uploadVideo(req: AuthRequest, res: Response) {

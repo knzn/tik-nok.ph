@@ -164,15 +164,27 @@ export function UploadForm() {
         duration: 5000,
       })
 
+      // Get the correct video ID (handle both id and _id formats)
+      const videoId = response.id || response._id
+      
+      console.log('Video uploaded successfully:', {
+        id: videoId,
+        title: response.title,
+        response: response
+      })
+
       // Store the video ID for tracking
-      localStorage.setItem('processingVideos', JSON.stringify([
-        ...JSON.parse(localStorage.getItem('processingVideos') || '[]'),
-        {
-          id: response.id,
-          title: response.title,
-          timestamp: new Date().toISOString()
-        }
-      ]))
+      const processingVideo = {
+        id: videoId,
+        title: response.title,
+        timestamp: new Date().toISOString()
+      }
+      
+      const existingVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
+      const updatedVideos = [...existingVideos, processingVideo]
+      
+      console.log('Updating processing videos list:', updatedVideos)
+      localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
 
       // Redirect to home page
       navigate('/')

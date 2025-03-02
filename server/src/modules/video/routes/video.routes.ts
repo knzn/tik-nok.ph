@@ -251,6 +251,7 @@ const getTopVideosHandler: RequestHandler = async (req, res, next) => {
 
 // Make sure routes are in the correct order
 router.get('/top/:type', getTopVideosHandler)  // This must come before /:id
+router.get('/:id/status', videoController.checkVideoStatus as RequestHandler)
 router.get('/:id', videoController.getVideo as RequestHandler)
 router.get('/', videoController.getVideos as RequestHandler)
 

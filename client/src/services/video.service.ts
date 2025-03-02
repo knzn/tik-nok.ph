@@ -189,8 +189,20 @@ export const VideoService = {
   async pollVideoStatus(videoId: string) {
     if (!videoId) return
 
-    const maxAttempts = 60 // 5 minutes
+    console.log(`Starting to poll video status for ID: ${videoId}`)
+    
+    const maxAttempts = 30 // Reduced from 60 to 30 (2.5 minutes)
     let attempts = 0
+    
+    // Check if we're already polling this video
+    const pollingKey = `polling_${videoId}`
+    if (localStorage.getItem(pollingKey)) {
+      console.log(`Already polling video: ${videoId}`)
+      return // Already polling this video
+    }
+    
+    // Set polling flag
+    localStorage.setItem(pollingKey, 'true')
 
     const poll = async () => {
       // Check if already known to not exist
@@ -198,10 +210,12 @@ export const VideoService = {
       if (notFoundCache) {
         const { timestamp } = JSON.parse(notFoundCache)
         if (Date.now() - timestamp < 5 * 60 * 1000) {
+          console.log(`Video ${videoId} is cached as not found, removing from processing videos`)
           // Remove from processing videos if it's cached as not found
           const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
           const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
           localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+          localStorage.removeItem(pollingKey) // Clear polling flag
           return
         }
         // Clear old cache
@@ -209,55 +223,71 @@ export const VideoService = {
       }
 
       if (attempts >= maxAttempts) {
+        console.log(`Max polling attempts (${maxAttempts}) reached for video: ${videoId}`)
         // Remove from processing videos after max attempts
         const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
         const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
         localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+        localStorage.removeItem(pollingKey) // Clear polling flag
         return
       }
-
+      
+      attempts++
+      console.log(`Polling attempt ${attempts}/${maxAttempts} for video: ${videoId}`)
+      
       try {
-        const video = await this.getVideo(videoId)
+        // Use a more efficient endpoint that just checks status
+        console.log(`Calling status endpoint for video: ${videoId}`)
+        const response = await api.get(`/videos/${videoId}/status`)
+        console.log(`Status response for ${videoId}:`, response.data)
         
-        if (video.status === 'ready' || video.status === 'failed') {
-          // Video is complete or failed, remove from processing
-          const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
-          const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
-          localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+        if (response.status === 200) {
+          // Check if the video is actually ready
+          const videoStatus = response.data.data?.status
+          console.log(`Video ${videoId} status: ${videoStatus}`)
           
-          if (video.status === 'ready') {
-            window.dispatchEvent(new CustomEvent('videoProcessingComplete', {
-              detail: { video }
-            }))
-          }
-          return
-        }
-
-        attempts++
-        setTimeout(poll, 5000) // Poll every 5 seconds
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          // Handle 403 Forbidden (private video) - consider it as ready
-          if (error.response?.status === 403) {
-            // Remove from processing videos - it's ready but private
+          // Only proceed if the video is ready or public
+          if (videoStatus === 'ready' || videoStatus === 'public') {
+            console.log(`Video ${videoId} is ready, dispatching event`)
             const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
-            const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
-            localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+            const video = storedVideos.find((v: any) => v.id === videoId)
             
-            // Dispatch a custom event for private video completion
-            const privateVideo = {
-              id: videoId,
-              status: 'ready',
-              visibility: 'private'
+            if (video) {
+              // Dispatch event that video is ready
+              const event = new CustomEvent('videoProcessed', {
+                detail: { 
+                  videoId, 
+                  title: video.title,
+                  isPrivate: false
+                }
+              })
+              window.dispatchEvent(event)
+              console.log(`Event dispatched for video: ${videoId}`)
+              
+              // Remove from processing videos
+              const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
+              localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+              localStorage.removeItem(pollingKey) // Clear polling flag
+            } else {
+              console.log(`Video ${videoId} not found in stored processing videos`)
             }
-            window.dispatchEvent(new CustomEvent('videoProcessingComplete', {
-              detail: { video: privateVideo }
-            }))
-            return;
+            return
           }
           
+          // If video exists but is still processing, continue polling
+          console.log(`Video ${videoId} exists but is not ready yet (status: ${videoStatus}), continuing to poll`)
+          setTimeout(poll, 5000)
+        } else {
+          // If we get an unexpected response, continue polling
+          console.log(`Unexpected response for video ${videoId}:`, response.status)
+          setTimeout(poll, 5000)
+        }
+      } catch (error) {
+        console.error(`Error polling video ${videoId}:`, error)
+        if (axios.isAxiosError(error)) {
           // Handle 404 Not Found
           if (error.response?.status === 404) {
+            console.log(`Video ${videoId} not found (404)`)
             // Cache the 404 response
             const notFoundCache = {
               id: videoId,
@@ -269,15 +299,40 @@ export const VideoService = {
             const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
             const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
             localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+            localStorage.removeItem(pollingKey) // Clear polling flag
+            return
+          }
+          
+          // Handle 403 Forbidden (private video)
+          if (error.response?.status === 403) {
+            console.log(`Video ${videoId} is private (403)`)
+            // Get the video from processing videos
+            const storedVideos = JSON.parse(localStorage.getItem('processingVideos') || '[]')
+            const video = storedVideos.find((v: any) => v.id === videoId)
+            
+            if (video) {
+              // Dispatch event that video is ready but private
+              const event = new CustomEvent('videoProcessed', {
+                detail: { videoId, title: video.title, isPrivate: true }
+              })
+              window.dispatchEvent(event)
+              console.log(`Private video event dispatched for video: ${videoId}`)
+            }
+            
+            // Remove from processing videos
+            const updatedVideos = storedVideos.filter((v: any) => v.id !== videoId)
+            localStorage.setItem('processingVideos', JSON.stringify(updatedVideos))
+            localStorage.removeItem(pollingKey) // Clear polling flag
             return
           }
         }
         
-        attempts++
+        // For other errors, continue polling
         setTimeout(poll, 5000)
       }
     }
-
+    
+    // Start polling
     poll()
   },
 

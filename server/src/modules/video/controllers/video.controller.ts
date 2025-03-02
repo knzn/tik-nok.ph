@@ -576,22 +576,74 @@ export class VideoController {
   async addView(req: AuthRequest, res: Response) {
     try {
       const { videoId } = req.params
-      const userId = req.user?.id // Optional - can be used to prevent duplicate views
-
-      const video = await VideoModel.findById(videoId)
-      if (!video) {
+      
+      // Increment views count
+      const updatedVideo = await VideoModel.findByIdAndUpdate(
+        videoId,
+        { $inc: { views: 1 } },
+        { new: true }
+      )
+      
+      if (!updatedVideo) {
         return res.status(404).json({ error: 'Video not found' })
       }
-
-      // Increment views count
-      await VideoModel.findByIdAndUpdate(videoId, {
-        $inc: { views: 1 }
+      
+      return res.status(200).json({ 
+        message: 'View counted successfully',
+        views: updatedVideo.views
       })
-
-      res.status(200).json({ message: 'View counted successfully' })
     } catch (error) {
-      console.error('Add view error:', error)
-      res.status(500).json({ error: 'Failed to add view' })
+      console.error('Error adding view:', error)
+      return res.status(500).json({ error: 'Failed to add view' })
+    }
+  }
+
+  /**
+   * Check if a video exists and is ready
+   * @route GET /api/videos/:id/status
+   */
+  checkVideoStatus = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params
+      
+      console.log(`Checking video status for ID: ${id}`)
+      
+      // Find video by ID
+      const video = await VideoModel.findById(id).select('status visibility userId')
+      
+      // If video doesn't exist, return 404
+      if (!video) {
+        console.log(`Video not found: ${id}`)
+        res.status(404).json({ error: 'Video not found' })
+        return
+      }
+      
+      console.log(`Video found with status: ${video.status}, visibility: ${video.visibility}`)
+      
+      // Check if user has access to this video
+      if (video.visibility === 'private') {
+        const authReq = req as AuthRequest
+        if (!authReq.user || authReq.user.id !== video.userId.toString()) {
+          console.log(`Access denied for user: ${authReq.user?.id || 'not authenticated'}`)
+          res.status(403).json({ error: 'You do not have permission to access this video' })
+          return
+        }
+      }
+      
+      // Return status
+      const response = {
+        status: 'success',
+        data: {
+          id: video._id,
+          status: video.status
+        }
+      }
+      
+      console.log(`Returning video status response:`, response)
+      res.status(200).json(response)
+    } catch (error) {
+      console.error('Error checking video status:', error)
+      res.status(500).json({ error: 'Failed to check video status' })
     }
   }
 } 
