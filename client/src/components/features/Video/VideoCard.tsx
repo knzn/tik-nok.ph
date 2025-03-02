@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { Video } from '../../../types/video.types'
 import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
 import { Lock, Eye, EyeOff } from 'lucide-react'
+import { formatDuration } from '../../../utils/formatDuration'
 
 interface VideoCardProps {
   video: Video
@@ -30,6 +31,16 @@ const formatTimeAgo = (dateString: string): string => {
     return 'Unknown';
   }
 };
+
+// Format video duration to MM:SS format
+// const formatDuration = (seconds: number): string => {
+//   if (isNaN(seconds)) return '0:00';
+//   
+//   const minutes = Math.floor(seconds / 60);
+//   const remainingSeconds = Math.floor(seconds % 60);
+//   
+//   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+// };
 
 export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardProps) => {
   // Get username safely with fallback
@@ -70,7 +81,7 @@ export const VideoCard = ({ video, onVideoClick, compact = false }: VideoCardPro
           {/* Duration badge */}
           {video.duration && (
             <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 py-0.5 rounded">
-              {video.duration}
+              {formatDuration(video.duration)}
             </div>
           )}
 

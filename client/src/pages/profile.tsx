@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar'
 import { Separator } from '../components/ui/separator'
 import { ScrollArea } from '../components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
+import { formatDuration } from '../utils/formatDuration'
 
 // Add this helper function at the top of the file
 const addCacheBuster = (url: string) => {
@@ -506,7 +507,7 @@ export function ProfilePage() {
                             {/* Duration badge if available */}
                             {video.duration && (
                               <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1 py-0.5 rounded">
-                                {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                                {formatDuration(video.duration)}
                               </div>
                             )}
                           </div>
