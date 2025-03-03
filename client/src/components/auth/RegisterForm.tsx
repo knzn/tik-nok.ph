@@ -26,7 +26,35 @@ export function RegisterForm() {
     try {
       setLoading(true)
       const { confirmPassword, ...registerData } = data
-      console.log('Sending register data:', registerData)
+      
+      // Validate data before sending
+      if (!registerData.email || !registerData.username || !registerData.password) {
+        toast({
+          variant: "destructive",
+          title: "Registration Failed",
+          description: "Please fill in all required fields"
+        })
+        setLoading(false)
+        return
+      }
+      
+      // Make sure password is a string
+      if (typeof registerData.password !== 'string') {
+        console.error('Password is not a string:', typeof registerData.password)
+        toast({
+          variant: "destructive",
+          title: "Registration Failed",
+          description: "Invalid password format"
+        })
+        setLoading(false)
+        return
+      }
+      
+      console.log('Sending register data:', {
+        ...registerData,
+        password: registerData.password ? `[${typeof registerData.password}:${registerData.password.length} chars]` : 'undefined'
+      })
+      
       const response = await AuthService.register(registerData)
       toast({
         title: "Success!",
