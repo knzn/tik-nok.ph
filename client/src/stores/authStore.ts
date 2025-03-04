@@ -13,6 +13,7 @@ interface User {
   contactNumber?: string
   facebookProfile?: string
   role?: 'USER' | 'MODERATOR' | 'ADMIN'
+  isPrivate?: boolean
 }
 
 interface AuthState {

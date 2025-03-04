@@ -16,6 +16,7 @@ import { VideoPage } from './pages/video/[id]'
 import { NotFoundPage } from './pages/404'
 import { ShortsPage } from './pages/shorts/[id]'
 import Trending from './pages/Trending'
+import SettingsPage from './pages/Settings'
 
 // Admin page imports
 import AdminIndex from './pages/admin'
@@ -46,6 +47,16 @@ function App() {
             <Route path="/video/:id" element={<VideoPage />} />
             <Route path="/shorts/:id" element={<ShortsPage />} />
             <Route path="/trending" element={<Trending />} />
+            
+            {/* Settings Route */}
+            <Route 
+              path="/settings" 
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              } 
+            />
             
             {/* Admin Routes - Only accessible by admins */}
             <Route 

@@ -225,4 +225,173 @@ export class AuthService {
       }
     }
   }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    try {
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Determine what type of hash we're dealing with
+      let isValid = false;
+      
+      if (user.password.startsWith('pbkdf2:')) {
+        // This is a crypto hash
+        isValid = verifyPasswordWithCrypto(currentPassword, user.password);
+      } else {
+        // Try bcrypt verification
+        try {
+          isValid = bcrypt.compareSync(currentPassword, user.password);
+        } catch (compareError: unknown) {
+          console.error('Password comparison failed:', compareError);
+          throw new Error('Authentication failed');
+        }
+      }
+      
+      if (!isValid) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // Hash the new password using the same methods as in register
+      let hashedPassword: string;
+      
+      try {
+        console.log('Attempting to hash new password with bcrypt...');
+        
+        // Try explicit salt generation first (approach 1)
+        try {
+          const salt = bcrypt.genSaltSync(10);
+          hashedPassword = bcrypt.hashSync(String(newPassword), salt);
+          console.log('Successfully hashed with bcrypt using explicit salt');
+        } catch (saltError: unknown) {
+          console.log('Explicit salt generation failed, trying direct hashing...');
+          
+          // Try direct hashing (approach 2)
+          hashedPassword = bcrypt.hashSync(String(newPassword), 10);
+          console.log('Successfully hashed with bcrypt directly');
+        }
+      } catch (bcryptError: unknown) {
+        console.error('All bcrypt approaches failed, using crypto fallback');
+        
+        // Use Node.js built-in crypto as fallback (approach 3)
+        hashedPassword = hashPasswordWithCrypto(newPassword);
+        console.log('Successfully hashed with crypto fallback');
+      }
+
+      // Update the user's password
+      user.password = hashedPassword;
+      await user.save();
+
+      return { 
+        success: true, 
+        message: 'Password updated successfully' 
+      };
+    } catch (error: unknown) {
+      console.error('Password change error:', error);
+      
+      if (error instanceof Error) {
+        throw error;
+      } else {
+        throw new Error('Failed to change password');
+      }
+    }
+  }
+
+  async changeEmail(userId: string, currentPassword: string, newEmail: string) {
+    try {
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Verify current password
+      let isValid = false;
+      
+      if (user.password.startsWith('pbkdf2:')) {
+        // This is a crypto hash
+        isValid = verifyPasswordWithCrypto(currentPassword, user.password);
+      } else {
+        // Try bcrypt verification
+        try {
+          isValid = bcrypt.compareSync(currentPassword, user.password);
+        } catch (compareError: unknown) {
+          console.error('Password comparison failed:', compareError);
+          throw new Error('Authentication failed');
+        }
+      }
+      
+      if (!isValid) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // Check if email already exists
+      const existingEmail = await UserModel.findOne({ email: newEmail });
+      if (existingEmail && existingEmail._id.toString() !== userId) {
+        throw new Error('Email already in use by another account');
+      }
+
+      // Update the user's email
+      user.email = newEmail;
+      await user.save();
+
+      return { 
+        success: true, 
+        message: 'Email updated successfully',
+        email: newEmail
+      };
+    } catch (error: unknown) {
+      console.error('Email change error:', error);
+      
+      if (error instanceof Error) {
+        throw error;
+      } else {
+        throw new Error('Failed to change email');
+      }
+    }
+  }
+
+  async changeUsername(userId: string, newUsername: string) {
+    try {
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Check if username already exists
+      const existingUsername = await UserModel.findOne({ username: newUsername });
+      if (existingUsername && existingUsername._id.toString() !== userId) {
+        throw new Error('Username already taken');
+      }
+
+      // Check username format
+      const usernameRegex = /^[a-zA-Z0-9_ ]+$/;
+      if (!usernameRegex.test(newUsername)) {
+        throw new Error('Username can only contain letters, numbers, underscores, and spaces');
+      }
+
+      if (newUsername.length < 3 || newUsername.length > 30) {
+        throw new Error('Username must be between 3 and 30 characters');
+      }
+
+      // Update the user's username
+      user.username = newUsername;
+      await user.save();
+
+      return { 
+        success: true, 
+        message: 'Username updated successfully',
+        username: newUsername,
+        displayName: user.displayName // Include the displayName in the response
+      };
+    } catch (error: unknown) {
+      console.error('Username change error:', error);
+      
+      if (error instanceof Error) {
+        throw error;
+      } else {
+        throw new Error('Failed to change username');
+      }
+    }
+  }
 } 

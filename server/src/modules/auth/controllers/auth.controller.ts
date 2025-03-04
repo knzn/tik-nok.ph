@@ -95,4 +95,135 @@ export class AuthController {
       })
     }
   }
+
+  public changePassword = async (req: Request, res: Response) => {
+    try {
+      // Get user ID from the authenticated request
+      const userId = (req as any).user?.id
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' })
+      }
+
+      // Validate input
+      const { currentPassword, newPassword, confirmPassword } = req.body
+
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ 
+          error: 'All fields are required',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ 
+          error: 'New passwords do not match',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ 
+          error: 'New password must be at least 6 characters long',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      // Change the password
+      const result = await this.authService.changePassword(
+        userId, 
+        currentPassword, 
+        newPassword
+      )
+
+      return res.json(result)
+    } catch (error) {
+      console.error('Password change error:', error)
+      return res.status(400).json({ 
+        error: error instanceof Error ? error.message : 'Password change failed',
+        code: error instanceof Error && error.message.includes('incorrect') ? 'INCORRECT_PASSWORD' : 'PASSWORD_CHANGE_FAILED'
+      })
+    }
+  }
+
+  public changeEmail = async (req: Request, res: Response) => {
+    try {
+      // Get user ID from the authenticated request
+      const userId = (req as any).user?.id
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' })
+      }
+
+      // Validate input
+      const { currentPassword, newEmail } = req.body
+
+      if (!currentPassword || !newEmail) {
+        return res.status(400).json({ 
+          error: 'All fields are required',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(newEmail)) {
+        return res.status(400).json({ 
+          error: 'Invalid email format',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      // Change the email
+      const result = await this.authService.changeEmail(
+        userId, 
+        currentPassword, 
+        newEmail
+      )
+
+      return res.json(result)
+    } catch (error) {
+      console.error('Email change error:', error)
+      return res.status(400).json({ 
+        error: error instanceof Error ? error.message : 'Email change failed',
+        code: error instanceof Error && error.message.includes('incorrect') ? 'INCORRECT_PASSWORD' : 
+              error instanceof Error && error.message.includes('already in use') ? 'EMAIL_EXISTS' :
+              'EMAIL_CHANGE_FAILED'
+      })
+    }
+  }
+
+  public changeUsername = async (req: Request, res: Response) => {
+    try {
+      // Get user ID from the authenticated request
+      const userId = (req as any).user?.id
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' })
+      }
+
+      // Validate input
+      const { newUsername } = req.body
+
+      if (!newUsername) {
+        return res.status(400).json({ 
+          error: 'New username is required',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      // Change the username
+      const result = await this.authService.changeUsername(
+        userId, 
+        newUsername
+      )
+
+      return res.json(result)
+    } catch (error) {
+      console.error('Username change error:', error)
+      return res.status(400).json({ 
+        error: error instanceof Error ? error.message : 'Username change failed',
+        code: error instanceof Error && error.message.includes('already taken') ? 'USERNAME_EXISTS' : 
+              error instanceof Error && error.message.includes('format') ? 'INVALID_FORMAT' :
+              'USERNAME_CHANGE_FAILED'
+      })
+    }
+  }
 }
