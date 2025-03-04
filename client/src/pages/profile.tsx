@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button'
 import { ProfileSetupModal } from '../components/profile/ProfileSetupModal'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 import { UpdateProfilePictureModal } from '../components/profile/UpdateProfilePictureModal'
-import { Camera, Grid, List, Video, Users, Heart, MessageSquare, Lock, EyeOff, Eye } from 'lucide-react'
+import { Camera, Grid, List, Video, Users, Heart, MessageSquare, Lock, EyeOff, Eye, MoreVertical } from 'lucide-react'
 import { api, followUser, unfollowUser, checkFollowStatus } from '../lib/api'
 import { VideoService } from '../services/video.service'
 import { useQuery } from '@tanstack/react-query'
@@ -16,6 +16,13 @@ import { Separator } from '../components/ui/separator'
 import { ScrollArea } from '../components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatDuration } from '../utils/formatDuration'
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger
+} from '../components/ui/dropdown-menu'
+import { toast } from '../components/ui/use-toast'
 
 // Add this helper function at the top of the file
 const addCacheBuster = (url: string) => {
@@ -56,6 +63,7 @@ export function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'public' | 'private' | 'unlisted'>('all')
+  const [updatingVideoId, setUpdatingVideoId] = useState<string | null>(null)
 
   const isOwnProfile = user?.username === username
 
@@ -223,6 +231,34 @@ export function ProfilePage() {
     },
     enabled: !!(profileData?._id || profileData?.id),
   });
+
+  // Handle visibility change
+  const handleVisibilityChange = async (videoId: string, newVisibility: 'public' | 'private' | 'unlisted') => {
+    try {
+      setUpdatingVideoId(videoId);
+      
+      // Update video visibility
+      await VideoService.updateVideo(videoId, { visibility: newVisibility });
+      
+      // Refetch videos to update the list
+      await refetchVideos();
+      
+      toast({
+        title: "Video updated",
+        description: `Visibility changed to ${newVisibility}`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error('Failed to update video visibility:', error);
+      toast({
+        title: "Error updating video",
+        description: "Failed to change video visibility",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingVideoId(null);
+    }
+  };
 
   // Filter videos based on selected visibility
   const filteredVideos = useMemo(() => {
@@ -460,6 +496,9 @@ export function ProfilePage() {
                     const isUnlisted = video.visibility === 'unlisted';
                     const isPublic = video.visibility === 'public' || !video.visibility;
                     
+                    // Check if this video is currently being updated
+                    const isUpdating = updatingVideoId === videoId;
+                    
                     return (
                       <motion.div
                         key={videoId}
@@ -470,14 +509,23 @@ export function ProfilePage() {
                         transition={{ duration: 0.2 }}
                       >
                         <Card 
-                          className={`overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${
+                          className={`overflow-hidden relative hover:shadow-md transition-shadow ${
                             isPrivate ? 'border-red-300' : 
                             isUnlisted ? 'border-yellow-300' : 
                             'border-green-300'
                           }`}
-                          onClick={() => navigate(`/video/${videoId}`)}
                         >
-                          <div className="aspect-video relative">
+                          {/* Video Card Content */}
+                          <div 
+                            className="aspect-video relative cursor-pointer"
+                            onClick={() => navigate(`/video/${videoId}`)}
+                          >
+                            {isUpdating && (
+                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                                <LoadingSpinner size={24} />
+                              </div>
+                            )}
+                            
                             {video.thumbnailUrl ? (
                               <img 
                                 src={video.thumbnailUrl} 
@@ -511,10 +559,62 @@ export function ProfilePage() {
                               </div>
                             )}
                           </div>
+                          
                           <CardContent className="p-3">
                             <div className="flex items-start justify-between">
-                              <h3 className="font-medium line-clamp-1 flex-1">{video.title}</h3>
+                              <h3 
+                                className="font-medium line-clamp-1 flex-1 cursor-pointer" 
+                                onClick={() => navigate(`/video/${videoId}`)}
+                              >
+                                {video.title}
+                              </h3>
+                              
+                              {/* Visibility dropdown - only for own profile */}
+                              {isOwnProfile && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon" 
+                                      className="h-6 w-6" 
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                      Edit
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-36">
+                                    <div className="px-2 py-1.5 text-xs font-semibold">Visibility</div>
+                                    <div className="h-px bg-muted my-1" />
+                                    <DropdownMenuItem 
+                                      className={`flex items-center ${isPublic ? 'bg-muted' : ''}`}
+                                      onClick={() => handleVisibilityChange(videoId, 'public')}
+                                      disabled={isPublic}
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      Public
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className={`flex items-center ${isUnlisted ? 'bg-muted' : ''}`}
+                                      onClick={() => handleVisibilityChange(videoId, 'unlisted')}
+                                      disabled={isUnlisted}
+                                    >
+                                      <EyeOff className="h-4 w-4 mr-2" />
+                                      Unlisted
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className={`flex items-center ${isPrivate ? 'bg-muted' : ''}`}
+                                      onClick={() => handleVisibilityChange(videoId, 'private')}
+                                      disabled={isPrivate}
+                                    >
+                                      <Lock className="h-4 w-4 mr-2" />
+                                      Private
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </div>
+                            
                             <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Users className="h-3 w-3" /> {video.views || 0}
