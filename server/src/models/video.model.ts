@@ -19,6 +19,10 @@ export interface IVideo extends Document {
   videoType?: string
   visibility?: 'public' | 'unlisted' | 'private'
   tags?: string[]
+  isHidden?: boolean
+  moderationStatus?: 'approved' | 'pending' | 'rejected'
+  moderationReason?: string
+  moderatedBy?: Schema.Types.ObjectId
   createdAt: Date
   updatedAt: Date
 }
@@ -62,6 +66,14 @@ export const VideoModel = mongoose.models[MODEL_NAME] ||
       default: 'public'
     },
     tags: [String],
+    isHidden: { type: Boolean, default: false },
+    moderationStatus: { 
+      type: String, 
+      enum: ['approved', 'pending', 'rejected'],
+      default: 'approved'
+    },
+    moderationReason: String,
+    moderatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   }, {
     timestamps: true
   })) 

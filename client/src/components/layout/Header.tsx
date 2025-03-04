@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Upload, Home, User } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth'
+import { Button } from '../../components/ui/button'
+import { Upload, Home, User, Shield } from 'lucide-react'
+import { useAuth } from '../../hooks/useAuth'
+import { DropdownMenuItem } from '../../components/ui/dropdown-menu'
 
 export function Header() {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin, isModerator } = useAuth()
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
@@ -22,6 +23,12 @@ export function Header() {
               <Upload className="w-4 h-4" />
               <span>Upload</span>
             </Link>
+            {(isAdmin || isModerator) && (
+              <Link to="/admin" className="flex items-center space-x-2">
+                <Shield className="w-4 h-4" />
+                <span>Admin</span>
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex-1" />
@@ -39,13 +46,30 @@ export function Header() {
                   <span>Profile</span>
                 </Link>
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={logout}
+              <DropdownMenuItem asChild>
+                <Link to="/settings">Settings</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => {
+                  logout();
+                  // Force reload the page to clear any cached state
+                  window.location.href = '/login';
+                }}
+                className="text-red-500 cursor-pointer"
               >
                 Logout
-              </Button>
+              </DropdownMenuItem>
+              {/* Temporary button to force token refresh */}
+              <DropdownMenuItem 
+                onClick={() => {
+                  logout();
+                  // Add a query parameter to indicate this was a forced refresh
+                  window.location.href = '/login?refresh=true';
+                }}
+                className="text-blue-500 cursor-pointer"
+              >
+                Refresh Token
+              </DropdownMenuItem>
             </>
           ) : (
             <>

@@ -105,7 +105,7 @@ export class AuthService {
       })
 
       const token = jwt.sign(
-        { id: user._id, email: user.email },
+        { id: user._id, email: user.email, role: user.role },
         config.jwtSecret,
         { expiresIn: '24h' }
       )
@@ -115,7 +115,8 @@ export class AuthService {
         user: {
           id: user._id,
           email: user.email,
-          username: user.username
+          username: user.username,
+          role: user.role
         }
       }
     } catch (error: unknown) {
@@ -176,7 +177,7 @@ export class AuthService {
       }
 
       const token = jwt.sign(
-        { id: user._id, email: user.email },
+        { id: user._id, email: user.email, role: user.role },
         config.jwtSecret,
         { expiresIn: '24h' }
       )
@@ -186,7 +187,8 @@ export class AuthService {
         user: {
           id: user._id,
           email: user.email,
-          username: user.username
+          username: user.username,
+          role: user.role
         }
       }
     } catch (error: unknown) {
@@ -210,7 +212,8 @@ export class AuthService {
       return {
         id: user._id,
         email: user.email,
-        username: user.username
+        username: user.username,
+        role: user.role
       }
     } catch (error: unknown) {
       console.error('Error getting user by ID:', error);

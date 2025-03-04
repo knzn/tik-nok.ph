@@ -5,11 +5,14 @@ interface User {
   id: string
   username: string
   email: string
+  role?: 'USER' | 'MODERATOR' | 'ADMIN'
 }
 
 interface AuthContextType {
   user: User | null
   token: string | null
+  isAdmin: boolean
+  isModerator: boolean
   login: (email: string, password: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => void
@@ -21,6 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  // Calculate role-based permissions
+  const isAdmin = user?.role === 'ADMIN'
+  const isModerator = user?.role === 'MODERATOR' || user?.role === 'ADMIN'
 
   useEffect(() => {
     // Check for saved auth state
@@ -90,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, isAdmin, isModerator, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   )

@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit'
 import authRoutes from './modules/auth/routes/auth.routes'
 import videoRoutes from './modules/video/routes/video.routes'
 import { userRoutes } from './modules/user/routes/user.routes'
+import adminRoutes from './modules/admin/routes/admin.routes'
 import { connectDatabase } from './config/database'
 import { config } from './config/environment'
 import path from 'path'
@@ -108,6 +109,7 @@ app.use('/thumbnails', (req, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/videos', videoRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/admin', adminRoutes)
 
 // Health check endpoint
 app.get('/health', (req, res) => {

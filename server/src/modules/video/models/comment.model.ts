@@ -24,7 +24,21 @@ const commentSchema = new mongoose.Schema({
   replies: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Comment'
-  }]
+  }],
+  isHidden: {
+    type: Boolean,
+    default: false
+  },
+  moderationStatus: {
+    type: String,
+    enum: ['approved', 'pending', 'rejected'],
+    default: 'approved'
+  },
+  moderationReason: String,
+  moderatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
 }, {
   timestamps: true
 })

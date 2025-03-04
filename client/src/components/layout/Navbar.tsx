@@ -1,17 +1,18 @@
 import { Link } from 'react-router-dom'
-import { useAuthStore } from '../../stores/authStore'
+import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../ui/button'
 import { 
   Upload, 
   LogOut, 
   User as UserIcon,
   Menu,
-  X
+  X,
+  Shield
 } from 'lucide-react'
 import { useState } from 'react'
 
 export function Navbar() {
-  const { user, isAuthenticated, logout } = useAuthStore()
+  const { user, isAuthenticated, logout, isAdmin, isModerator } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const handleLogout = () => {
@@ -58,6 +59,15 @@ export function Navbar() {
                 </Link>
               </Button>
 
+              {(isAdmin || isModerator) && (
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/admin" className="flex items-center space-x-2">
+                    <Shield className="w-4 h-4" />
+                    <span>Admin</span>
+                  </Link>
+                </Button>
+              )}
+
               <Button asChild variant="ghost" size="sm">
                 <Link to={`/profile/${user?.username}`} className="flex items-center space-x-2">
                   <UserIcon className="w-4 h-4" />
@@ -100,6 +110,15 @@ export function Navbar() {
                       <span>Upload</span>
                     </Link>
                   </Button>
+
+                  {(isAdmin || isModerator) && (
+                    <Button asChild variant="ghost" size="sm" className="justify-start">
+                      <Link to="/admin" className="flex items-center space-x-2">
+                        <Shield className="w-4 h-4" />
+                        <span>Admin</span>
+                      </Link>
+                    </Button>
+                  )}
 
                   <Button asChild variant="ghost" size="sm" className="justify-start">
                     <Link to={`/profile/${user?.username}`} className="flex items-center space-x-2">
