@@ -443,34 +443,29 @@ export default function SettingsPage() {
         console.log('Starting privacy update process for user:', user.id);
         const isPrivate = data.profilePrivacy === 'private';
         
-        // Use the same endpoint as the EditProfileModal
-        const response = await api.patch('/users/profile', {
-          isPrivate: isPrivate,
-          // Keep existing profile fields to avoid overwriting them
-          gamefarmName: user.gamefarmName || '',
-          address: user.address || '',
-          contactNumber: user.contactNumber || '',
-          facebookProfile: user.facebookProfile || ''
+        // Use our new dedicated API endpoint for privacy changes
+        const response = await api.post('/auth/change-privacy', {
+          isPrivate: isPrivate
         });
         
         console.log('Privacy update response:', response);
         
-        if (!response.data) {
-          throw new Error('Failed to update profile');
+        if (!response.data || !response.data.success) {
+          throw new Error('Failed to update privacy settings');
         }
         
-        // Update the user data in auth store with the response from server
+        // Update the user data in auth store with the privacy setting
         await updateUser({
           ...user,
-          ...response.data
+          isPrivate: isPrivate
         });
         
         // Update localStorage
+        const userData = JSON.parse(localStorage.getItem('user') || '{}');
         localStorage.setItem('user', JSON.stringify({
-          ...user,
-          ...response.data
+          ...userData,
+          isPrivate: isPrivate
         }));
-        localStorage.setItem('user_privacy', data.profilePrivacy);
         
         toast({
           title: "Success",
@@ -486,7 +481,7 @@ export default function SettingsPage() {
       console.error("Privacy update error:", error);
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to update privacy settings. Please try again.",
+        description: error.response?.data?.error || "Failed to update privacy settings. Please try again.",
         variant: "destructive"
       });
     } finally {

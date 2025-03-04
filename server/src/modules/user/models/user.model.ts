@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema({
   address: { type: String },
   contactNumber: { type: String },
   facebookProfile: { type: String },
+  isPrivate: { type: Boolean, default: false },
   role: { type: String, enum: ['USER', 'MODERATOR', 'ADMIN'], default: 'USER' }
 }, {
   timestamps: true

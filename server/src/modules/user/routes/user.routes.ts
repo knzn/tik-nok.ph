@@ -110,4 +110,13 @@ router.get('/follow/check/:userId', authMiddleware, async (req, res, next) => {
   }
 })
 
+// Add route to get videos from followed users
+router.get('/following/videos', authMiddleware, async (req, res, next) => {
+  try {
+    await UserController.getFollowingVideos(req as AuthRequest, res)
+  } catch (error) {
+    next(error)
+  }
+})
+
 export { router as userRoutes } 

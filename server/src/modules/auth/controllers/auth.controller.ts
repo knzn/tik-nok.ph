@@ -226,4 +226,38 @@ export class AuthController {
       })
     }
   }
+
+  public changePrivacy = async (req: Request, res: Response) => {
+    try {
+      // Get user ID from the authenticated request
+      const userId = (req as any).user?.id
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' })
+      }
+
+      // Validate input
+      const { isPrivate } = req.body
+
+      if (typeof isPrivate !== 'boolean') {
+        return res.status(400).json({ 
+          error: 'Privacy setting must be a boolean value',
+          code: 'VALIDATION_ERROR'
+        })
+      }
+
+      // Change the privacy setting
+      const result = await this.authService.changePrivacy(
+        userId, 
+        isPrivate
+      )
+
+      return res.json(result)
+    } catch (error) {
+      console.error('Privacy change error:', error)
+      return res.status(400).json({ 
+        error: error instanceof Error ? error.message : 'Privacy change failed',
+        code: 'PRIVACY_CHANGE_FAILED'
+      })
+    }
+  }
 }

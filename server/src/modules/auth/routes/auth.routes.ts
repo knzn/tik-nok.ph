@@ -48,4 +48,9 @@ router.post('/change-username', authMiddleware, (req, res) => {
   authController.changeUsername(req, res)
 })
 
+// Add change privacy route - protected with authentication
+router.post('/change-privacy', authMiddleware, (req, res) => {
+  authController.changePrivacy(req, res)
+})
+
 export default router 

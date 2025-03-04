@@ -37,6 +37,21 @@ interface VideoResponse {
   total?: number
 }
 
+interface UserVideoGroup {
+  user: {
+    _id: string;
+    username: string;
+    profilePicture?: string;
+  };
+  videos: Video[];
+}
+
+interface FollowingVideosResponse {
+  data: UserVideoGroup[];
+  nextPage?: number;
+  total: number;
+}
+
 interface VideoUploadResponse {
   _id: string  // MongoDB returns _id
   id?: string
@@ -77,6 +92,11 @@ const transformComment = (comment: ApiComment): Comment => ({
 export const VideoService = {
   async getVideos(params?: { page?: number, limit?: number }): Promise<VideoResponse> {
     const { data } = await api.get<VideoResponse>('/videos', { params })
+    return data
+  },
+
+  async getFollowingVideos(params?: { page?: number, limit?: number }): Promise<FollowingVideosResponse> {
+    const { data } = await api.get<FollowingVideosResponse>('/users/following/videos', { params })
     return data
   },
 

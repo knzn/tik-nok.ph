@@ -394,4 +394,31 @@ export class AuthService {
       }
     }
   }
+
+  async changePrivacy(userId: string, isPrivate: boolean) {
+    try {
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Update the user's privacy setting
+      user.isPrivate = isPrivate;
+      await user.save();
+
+      return { 
+        success: true, 
+        message: `Profile is now ${isPrivate ? 'private' : 'public'}`,
+        isPrivate: isPrivate
+      };
+    } catch (error: unknown) {
+      console.error('Privacy change error:', error);
+      
+      if (error instanceof Error) {
+        throw error;
+      } else {
+        throw new Error('Failed to change privacy settings');
+      }
+    }
+  }
 } 

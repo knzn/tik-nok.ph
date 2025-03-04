@@ -3,6 +3,7 @@ import { UserModel } from '../models/user.model'
 import { AuthRequest } from '../../auth/middleware/auth.middleware'
 import { Request } from 'express'
 import { FollowModel } from '../models/follow.model'
+import { VideoModel } from '../../video/models/video.model'
 
 export class UserController {
   static async getProfile(req: AuthRequest, res: Response) {
@@ -116,12 +117,25 @@ export class UserController {
       const { username } = req.params
       
       const user = await UserModel.findOne({ username })
-        .select('-password -email -role')
+        .select('-password')
 
       if (!user) {
         return res.status(404).json({ error: 'User not found' })
       }
 
+      // Check if the profile is private
+      if (user.isPrivate) {
+        // If the profile is private, only return limited information
+        return res.json({
+          _id: user._id,
+          username: user.username,
+          displayName: user.displayName,
+          profilePicture: user.profilePicture,
+          isPrivate: true
+        })
+      }
+
+      // For public profiles, return full information
       const followersCount = await FollowModel.countDocuments({ following: user._id })
       const followingCount = await FollowModel.countDocuments({ follower: user._id })
 
@@ -189,6 +203,82 @@ export class UserController {
       res.json({ isFollowing: !!follow })
     } catch (error) {
       res.status(500).json({ error: 'Failed to check follow status' })
+    }
+  }
+
+  static async getFollowingVideos(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user.id
+      const page = parseInt(req.query.page as string) || 1
+      const limit = parseInt(req.query.limit as string) || 12
+      const skip = (page - 1) * limit
+
+      // Get the list of users that the current user follows
+      const following = await FollowModel.find({ follower: userId })
+        .select('following')
+        .lean()
+
+      const followingIds = following.map(follow => follow.following)
+
+      if (followingIds.length === 0) {
+        return res.json({
+          data: [],
+          nextPage: null,
+          total: 0
+        })
+      }
+
+      // Get videos from followed users, grouped by user
+      const videos = await VideoModel.find({
+        userId: { $in: followingIds },
+        visibility: 'public'
+      })
+      .populate('userId', 'username profilePicture')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+
+      // Count total videos for pagination
+      const total = await VideoModel.countDocuments({
+        userId: { $in: followingIds },
+        visibility: 'public'
+      })
+
+      // Define interface for user videos
+      interface UserVideos {
+        user: {
+          _id: string;
+          username: string;
+          profilePicture?: string;
+        };
+        videos: any[];
+      }
+
+      // Group videos by user with proper type annotations
+      const videosByUser = videos.reduce<Record<string, UserVideos>>((acc: Record<string, UserVideos>, video: any) => {
+        const userId = video.userId._id.toString()
+        if (!acc[userId]) {
+          acc[userId] = {
+            user: video.userId,
+            videos: []
+          }
+        }
+        acc[userId].videos.push(video)
+        return acc
+      }, {})
+
+      // Convert to array format
+      const result = Object.values(videosByUser)
+
+      res.json({
+        data: result,
+        nextPage: page * limit < total ? page + 1 : null,
+        total
+      })
+    } catch (error) {
+      console.error('Get following videos error:', error)
+      res.status(500).json({ error: 'Failed to get videos from followed users' })
     }
   }
 }
