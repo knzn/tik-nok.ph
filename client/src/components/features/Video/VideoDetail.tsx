@@ -452,7 +452,7 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
                     onClick={handleDislike}
                   >
                     <ThumbsDown className="h-4 w-4" />
-                    {dislikesCount.toLocaleString()}
+                    
                   </Button>
                 </div>
 

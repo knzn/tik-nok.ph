@@ -4,8 +4,58 @@ import { AuthRequest } from '../../auth/middleware/auth.middleware'
 import { Request } from 'express'
 import { FollowModel } from '../models/follow.model'
 import { VideoModel } from '../../video/models/video.model'
+import { StorageFactory } from '../../../services/storage'
+import { promises as fsPromises } from 'fs'
+import path from 'path'
 
 export class UserController {
+  // Get the storage service
+  private static storageService = StorageFactory.getStorageService()
+  private static useSpaces = process.env.USE_SPACES_STORAGE === 'true'
+
+  /**
+   * Helper method to upload a file to either local storage or DigitalOcean Spaces
+   * @param file The uploaded file
+   * @param userId User ID
+   * @param fileType Type of file (profile or cover)
+   * @returns URL to the uploaded file
+   */
+  private static async uploadUserFile(
+    file: Express.Multer.File,
+    userId: string,
+    fileType: 'profile' | 'cover'
+  ): Promise<string> {
+    if (this.useSpaces) {
+      const filename = `${fileType}-${Date.now()}-${path.basename(file.originalname)}`;
+      
+      // Upload to DigitalOcean Spaces
+      const fileUrl = await this.storageService.uploadFile(
+        file.path,
+        `profiles/${userId}/${filename}`,
+        {
+          contentType: file.mimetype,
+          isPublic: true
+        }
+      );
+      
+      console.log(`${fileType} file uploaded to: ${fileUrl}`);
+      
+      // Delete the local file after upload
+      try {
+        await fsPromises.unlink(file.path);
+      } catch (error) {
+        console.error('Failed to delete local file:', error);
+      }
+      
+      return fileUrl;
+    } else {
+      // Use local storage path
+      return fileType === 'profile'
+        ? `${process.env.SERVER_URL || 'http://localhost:3000'}/uploads/profiles/${file.filename}`
+        : `/uploads/profiles/${file.filename}`;
+    }
+  }
+
   static async getProfile(req: AuthRequest, res: Response) {
     try {
       const userId = req.user.id
@@ -67,11 +117,13 @@ export class UserController {
       }
 
       const userId = req.user.id
-      const profilePicture = `${process.env.SERVER_URL || 'http://localhost:3000'}/uploads/profiles/${req.file.filename}`
+      
+      // Upload the profile picture
+      const profilePictureUrl = await UserController.uploadUserFile(req.file, userId, 'profile')
 
       const updatedUser = await UserModel.findByIdAndUpdate(
         userId,
-        { $set: { profilePicture } },
+        { $set: { profilePicture: profilePictureUrl } },
         { new: true }
       ).select('-password')
 
@@ -93,11 +145,13 @@ export class UserController {
       }
 
       const userId = req.user.id
-      const coverPhoto = `/uploads/profiles/${req.file.filename}`
+      
+      // Upload the cover photo
+      const coverPhotoUrl = await UserController.uploadUserFile(req.file, userId, 'cover')
 
       const updatedUser = await UserModel.findByIdAndUpdate(
         userId,
-        { $set: { coverPhoto } },
+        { $set: { coverPhoto: coverPhotoUrl } },
         { new: true }
       ).select('-password')
 

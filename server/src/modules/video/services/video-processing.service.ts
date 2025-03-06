@@ -5,6 +5,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { VideoModel } from '../models/video.model'
 import { config } from '../../../config/environment'
+import { StorageFactory } from '../../../services/storage'
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path)
 ffmpeg.setFfprobePath(ffprobeStatic.path)
@@ -17,29 +18,53 @@ export class VideoProcessingService {
     { resolution: '360p', height: 360, bitrate: '600k' }
   ]
 
+  // Get the storage service
+  private storageService = StorageFactory.getStorageService();
+  private useSpaces = config.spaces.useSpacesStorage;
+
   async processVideo(
     inputPath: string,
     outputDir: string,
     videoId: string
   ): Promise<void> {
     try {
-      // Create output directory if it doesn't exist
-      await fs.mkdir(outputDir, { recursive: true })
+      // Create temporary output directory for processing
+      const tempOutputDir = path.join(process.cwd(), 'uploads', 'temp', videoId);
+      await fs.mkdir(tempOutputDir, { recursive: true });
 
       // Generate thumbnail
-      const thumbnailPath = path.join(outputDir, 'thumbnail.jpg')
-      await this.generateThumbnail(inputPath, thumbnailPath)
+      const thumbnailPath = path.join(tempOutputDir, 'thumbnail.jpg');
+      await this.generateThumbnail(inputPath, thumbnailPath);
 
       // Create HLS manifest and segments
-      await this.createHLSStream(inputPath, outputDir)
+      await this.createHLSStream(inputPath, tempOutputDir);
+
+      // Upload files to storage (either local or DigitalOcean Spaces)
+      await this.uploadProcessedFiles(tempOutputDir, videoId);
 
       // Update video record with paths
+      let hlsUrl: string;
+      let thumbnailUrl: string;
+      
+      if (this.useSpaces) {
+        // Use Spaces URLs
+        hlsUrl = this.storageService.getFileUrl(`videos/${videoId}/playlist.m3u8`);
+        thumbnailUrl = this.storageService.getFileUrl(`thumbnails/${videoId}/thumbnail.jpg`);
+      } else {
+        // Use local storage URLs
+        hlsUrl = `${config.baseUrl}/uploads/${videoId}/playlist.m3u8`;
+        thumbnailUrl = `${config.baseUrl}/uploads/${videoId}/thumbnail.jpg`;
+      }
+
       await VideoModel.findByIdAndUpdate(videoId, {
         status: 'ready',
-        hlsUrl: `${config.baseUrl}/uploads/${videoId}/playlist.m3u8`,
-        thumbnailUrl: `${config.baseUrl}/uploads/${videoId}/thumbnail.jpg`,
+        hlsUrl,
+        thumbnailUrl,
         quality: this.qualities.map(q => q.resolution)
-      })
+      });
+
+      // Clean up temporary files
+      await this.cleanupTempFiles(tempOutputDir);
     } catch (error) {
       console.error('Video processing failed:', error)
       await VideoModel.findByIdAndUpdate(videoId, {
@@ -117,5 +142,68 @@ export class VideoProcessingService {
     })
 
     return playlist
+  }
+
+  /**
+   * Upload processed video files to storage (local or DigitalOcean Spaces)
+   */
+  private async uploadProcessedFiles(tempDir: string, videoId: string): Promise<void> {
+    // Get all files in the temp directory
+    const files = await fs.readdir(tempDir);
+    
+    // Upload each file
+    for (const file of files) {
+      const filePath = path.join(tempDir, file);
+      const stats = await fs.stat(filePath);
+      
+      if (stats.isFile()) {
+        // Determine content type based on file extension
+        const ext = path.extname(file).toLowerCase();
+        let contentType = 'application/octet-stream';
+        
+        if (ext === '.m3u8') {
+          contentType = 'application/vnd.apple.mpegurl';
+        } else if (ext === '.ts') {
+          contentType = 'video/mp2t';
+        } else if (ext === '.jpg' || ext === '.jpeg') {
+          contentType = 'image/jpeg';
+        } else if (ext === '.png') {
+          contentType = 'image/png';
+        }
+        
+        // Determine appropriate destination path
+        let destinationPath: string;
+        
+        if (file === 'thumbnail.jpg') {
+          // Store thumbnails in the thumbnails directory
+          destinationPath = `thumbnails/${videoId}/thumbnail.jpg`;
+        } else {
+          // Store video files in the videos directory
+          destinationPath = `videos/${videoId}/${file}`;
+        }
+        
+        // Upload to storage
+        await this.storageService.uploadFile(
+          filePath,
+          destinationPath,
+          {
+            contentType,
+            isPublic: true
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Clean up temporary files after processing
+   */
+  private async cleanupTempFiles(tempDir: string): Promise<void> {
+    try {
+      // Recursively delete the temp directory
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch (error) {
+      console.error('Failed to clean up temp files:', error);
+    }
   }
 } 

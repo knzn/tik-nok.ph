@@ -23,6 +23,15 @@ services:
       - public_data:/usr/src/app/server/public
     env_file:
       - ./server/.env
+    environment:
+      # DigitalOcean Spaces configuration
+      - DO_SPACES_ENDPOINT=sgp1.digitaloceanspaces.com
+      - DO_SPACES_KEY=DO80136R3RPP3ZZZHKMJ
+      - DO_SPACES_SECRET=FkiBADek+cYRFBbflZ2XVbWCN7paHXv80kLZ9gfzklM
+      - DO_SPACES_BUCKET=tik-nok-uploads
+      - DO_CDN_ENABLED=true
+      - DO_CDN_ENDPOINT=tik-nok-uploads.sgp1.cdn.digitaloceanspaces.com
+      - USE_SPACES_STORAGE=true
     depends_on:
       - redis
     networks:

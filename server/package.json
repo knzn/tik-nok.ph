@@ -16,6 +16,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@video-app/shared": "file:../shared",
+    "aws-sdk": "^2.1573.0",
     "bcryptjs": "^3.0.0",
     "bull": "^4.16.5",
     "cors": "^2.8.5",
@@ -39,6 +40,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/aws-sdk": "^2.7.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

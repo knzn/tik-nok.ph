@@ -9,6 +9,7 @@ import { CommentModel } from '../models/comment.model'
 import { FollowModel } from '../../user/models/follow.model'
 import jwt from 'jsonwebtoken'
 import { config } from '../../../config/environment'
+import { StorageFactory } from '../../../services/storage'
 
 interface UserDocument extends Document {
   _id: string;
@@ -45,6 +46,9 @@ export const upload = multer({
 })
 
 export class VideoController {
+  private storageService = StorageFactory.getStorageService()
+  private useSpaces = config.spaces.useSpacesStorage
+
   constructor(private videoProcessingService: VideoProcessingService) {}
 
   upload = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -67,15 +71,15 @@ export class VideoController {
       }
 
       // Parse tags if they exist
-      let tags: string[] = [];
+      let tags: string[] = []
       if (req.body.tags) {
         try {
-          tags = JSON.parse(req.body.tags);
+          tags = JSON.parse(req.body.tags)
         } catch (e) {
-          console.error('Error parsing tags:', e);
+          console.error('Error parsing tags:', e)
           // If parsing fails, try to handle as comma-separated string
           if (typeof req.body.tags === 'string') {
-            tags = req.body.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean);
+            tags = req.body.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean)
           }
         }
       }
@@ -91,10 +95,15 @@ export class VideoController {
         duration: req.body.duration ? parseFloat(req.body.duration) : 0
       })
 
+      // The output directory depends on whether we're using Spaces or local storage
+      const outputDir = this.useSpaces 
+        ? `videos/${video.id}` 
+        : `uploads/${video.id}`
+
       // Start processing in background
       this.videoProcessingService.processVideo(
         req.file.path,
-        `uploads/${video.id}`,
+        outputDir,
         video.id
       ).catch(console.error)
 

@@ -7,6 +7,10 @@ console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Set (value hidden for sec
 console.log('PORT:', process.env.PORT)
 console.log('REDIS_HOST:', process.env.REDIS_HOST)
 console.log('REDIS_PORT:', process.env.REDIS_PORT)
+console.log('DO_SPACES_ENDPOINT:', process.env.DO_SPACES_ENDPOINT || 'Not set')
+console.log('DO_SPACES_BUCKET:', process.env.DO_SPACES_BUCKET || 'Not set')
+console.log('DO_SPACES_KEY:', process.env.DO_SPACES_KEY ? 'Set (value hidden for security)' : 'Not set')
+console.log('USE_SPACES_STORAGE:', process.env.USE_SPACES_STORAGE || 'Not set (defaulting to false)')
 
 export const config = {
   port: process.env.PORT || 3000,
@@ -18,5 +22,15 @@ export const config = {
   uploadDir: 'uploads',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
+  // DigitalOcean Spaces configuration
+  spaces: {
+    endpoint: process.env.DO_SPACES_ENDPOINT,
+    bucket: process.env.DO_SPACES_BUCKET,
+    key: process.env.DO_SPACES_KEY,
+    secret: process.env.DO_SPACES_SECRET,
+    cdnEnabled: process.env.DO_CDN_ENABLED === 'true',
+    cdnEndpoint: process.env.DO_CDN_ENDPOINT,
+    useSpacesStorage: process.env.USE_SPACES_STORAGE === 'true'
+  },
   // Add other environment configurations as needed
 } 
