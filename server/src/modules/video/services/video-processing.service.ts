@@ -206,4 +206,35 @@ export class VideoProcessingService {
       console.error('Failed to clean up temp files:', error);
     }
   }
+
+  /**
+   * Delete all files related to a video from storage
+   * @param videoId The ID of the video to delete
+   */
+  async deleteVideoFiles(videoId: string): Promise<void> {
+    try {
+      console.log(`Deleting all files for video: ${videoId}`);
+      
+      // Delete thumbnail directory
+      console.log(`Deleting thumbnail directory for video: ${videoId}`);
+      try {
+        await this.storageService.deleteDirectory(`thumbnails/${videoId}`);
+      } catch (error) {
+        console.error(`Error deleting thumbnail directory: thumbnails/${videoId}`, error);
+      }
+      
+      // Delete videos directory
+      console.log(`Deleting videos directory for video: ${videoId}`);
+      try {
+        await this.storageService.deleteDirectory(`videos/${videoId}`);
+      } catch (error) {
+        console.error(`Error deleting videos directory: videos/${videoId}`, error);
+      }
+      
+      console.log(`Successfully deleted all files for video: ${videoId}`);
+    } catch (error) {
+      console.error(`Error deleting video files for ${videoId}:`, error);
+      throw error;
+    }
+  }
 } 

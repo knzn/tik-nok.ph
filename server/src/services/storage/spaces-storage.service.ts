@@ -135,4 +135,64 @@ export class SpacesStorageService implements StorageService {
     console.log(`Using standard Spaces URL: https://${this.bucket}.${this.endpoint}/${normalizedPath}`);
     return `https://${this.bucket}.${this.endpoint}/${normalizedPath}`;
   }
+
+  /**
+   * Delete all files with a given prefix (simulates directory deletion)
+   * @param prefix Directory prefix to delete
+   * @returns Promise resolving when all files are deleted
+   */
+  async deleteDirectory(prefix: string): Promise<void> {
+    console.log(`Attempting to delete directory: ${prefix}`);
+    
+    // Ensure the prefix ends with a trailing slash if it's meant to be a directory
+    const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+    
+    try {
+      // First, list all objects with the prefix
+      console.log(`Listing objects with prefix: ${normalizedPrefix}`);
+      
+      // We may need to handle pagination if there are many objects
+      let isTruncated = true;
+      let continuationToken: string | undefined;
+      
+      while (isTruncated) {
+        const listParams: AWS.S3.ListObjectsV2Request = {
+          Bucket: this.bucket,
+          Prefix: normalizedPrefix,
+          ContinuationToken: continuationToken
+        };
+        
+        const listedObjects = await this.s3.listObjectsV2(listParams).promise();
+        
+        if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+          console.log(`No objects found with prefix: ${normalizedPrefix}`);
+          break;
+        }
+        
+        console.log(`Found ${listedObjects.Contents.length} objects to delete`);
+        
+        // Create a list of objects to delete
+        const deleteParams: AWS.S3.DeleteObjectsRequest = {
+          Bucket: this.bucket,
+          Delete: {
+            Objects: listedObjects.Contents.map(obj => ({ Key: obj.Key! })),
+            Quiet: false
+          }
+        };
+        
+        // Delete the objects
+        const deleteResult = await this.s3.deleteObjects(deleteParams).promise();
+        console.log(`Deleted ${deleteResult.Deleted?.length || 0} objects`);
+        
+        // Check if there are more objects to delete
+        isTruncated = listedObjects.IsTruncated === true;
+        continuationToken = listedObjects.NextContinuationToken;
+      }
+      
+      console.log(`Successfully deleted all objects with prefix: ${normalizedPrefix}`);
+    } catch (error) {
+      console.error(`Error deleting directory ${normalizedPrefix}:`, error);
+      throw error;
+    }
+  }
 } 

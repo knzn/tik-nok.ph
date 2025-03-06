@@ -36,6 +36,13 @@ export interface StorageService {
   deleteFile(filePath: string): Promise<void>;
 
   /**
+   * Delete all files with a given prefix (simulates directory deletion)
+   * @param prefix Directory prefix to delete
+   * @returns Promise resolving when all files are deleted
+   */
+  deleteDirectory(prefix: string): Promise<void>;
+
+  /**
    * Check if a file exists in storage
    * @param filePath Path to the file to check
    * @returns Promise resolving to true if the file exists, false otherwise

@@ -75,6 +75,21 @@ interface VideoUploadResponse {
   aspectRatio?: number
 }
 
+// Adding Report type interface
+export interface ReportReason {
+  value: string;
+  label: string;
+}
+
+export const reportReasons: ReportReason[] = [
+  { value: 'inappropriate', label: 'Inappropriate content' },
+  { value: 'spam', label: 'Spam or misleading content' },
+  { value: 'copyright', label: 'Copyright violation' },
+  { value: 'harassment', label: 'Harassment or bullying' },
+  { value: 'violence', label: 'Violent or harmful content' },
+  { value: 'other', label: 'Other' }
+];
+
 // Helper function to transform API response to frontend model
 const transformComment = (comment: ApiComment): Comment => ({
   id: comment._id,
@@ -538,5 +553,10 @@ export const VideoService = {
       console.error('Error fetching user videos:', error);
       throw error;
     }
+  },
+
+  async reportVideo(videoId: string, reason: string, details?: string): Promise<{ message: string }> {
+    const response = await api.post(`/videos/${videoId}/report`, { reason, details });
+    return response.data;
   },
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { Pencil, Trash2, ThumbsUp, ThumbsDown, MoreVertical, Users, Bell, MessageSquare } from 'lucide-react'
+import { Pencil, Trash2, ThumbsUp, ThumbsDown, MoreVertical, Users, Bell, MessageSquare, Flag } from 'lucide-react'
 import { VideoService } from '../../../services/video.service'
 import { VideoPlayer } from './VideoPlayer'
 import { CommentSection } from '../Comment/CommentSection'
@@ -34,16 +34,32 @@ import { cn } from "../../../lib/utils"
 import { Avatar, AvatarImage, AvatarFallback } from "../../../components/ui/avatar"
 import { followUser, unfollowUser, checkFollowStatus } from '../../../lib/api'
 import { formatTimeAgo } from '../../../utils/formatTimeAgo'
+import {
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from "../../../components/ui/dialog"
+import { reportReasons } from "../../../services/video.service"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "../../../components/ui/select"
 
 interface VideoDetailProps {
   videoId: string
 }
 
 export function VideoDetail({ videoId }: VideoDetailProps) {
-  const { user } = useAuthStore()
   const navigate = useNavigate()
-  const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const { toast } = useToast()
   
   // State
   const [showComments, setShowComments] = useState(false)
@@ -60,6 +76,9 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
   const [likeStatus, setLikeStatus] = useState<'like' | 'dislike' | null>(null)
   const [likesCount, setLikesCount] = useState(0)
   const [dislikesCount, setDislikesCount] = useState(0)
+  const [showReportDialog, setShowReportDialog] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [reportDetails, setReportDetails] = useState('')
 
   // Query
   const { data: video, isLoading: isLoadingVideo, error } = useQuery<Video>({
@@ -339,6 +358,38 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
     }
   }
 
+  const handleReport = async () => {
+    if (!reportReason) {
+      toast({
+        title: "Error",
+        description: "Please select a reason for reporting.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      await VideoService.reportVideo(videoId, reportReason, reportDetails)
+      
+      toast({
+        title: "Success",
+        description: "Video has been reported. Our moderators will review it.",
+      })
+      
+      // Reset form and close dialog
+      setShowReportDialog(false)
+      setReportReason('')
+      setReportDetails('')
+    } catch (error) {
+      console.error('Error reporting video:', error)
+      toast({
+        title: "Error",
+        description: "Failed to report the video. Please try again later.",
+        variant: "destructive"
+      })
+    }
+  }
+
   if (isLoadingVideo) {
     return <LoadingSpinner />
   }
@@ -455,6 +506,15 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
                     
                   </Button>
                 </div>
+
+                <Button 
+                  variant="outline" 
+                  className="rounded-full hover:bg-gray-100"
+                  onClick={() => setShowReportDialog(true)}
+                >
+                  <Flag className="mr-2 h-4 w-4" />
+                  Report
+                </Button>
 
                 <Button 
                   variant="outline" 
@@ -580,6 +640,56 @@ export function VideoDetail({ videoId }: VideoDetailProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Report Dialog */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Report Video</DialogTitle>
+            <DialogDescription>
+              Please select a reason for reporting this video. Our moderators will review your report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label htmlFor="reason" className="text-sm font-medium">
+                Reason:
+              </label>
+              <Select 
+                value={reportReason} 
+                onValueChange={setReportReason}
+                placeholder="Select a reason"
+              >
+                {reportReasons.map((reason) => (
+                  <SelectItem key={reason.value} value={reason.value}>
+                    {reason.label}
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <label htmlFor="details" className="text-sm font-medium">
+                Additional details (optional):
+              </label>
+              <Textarea
+                id="details"
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                placeholder="Provide any additional details to help our moderators"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReportDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleReport}>
+              Submit Report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

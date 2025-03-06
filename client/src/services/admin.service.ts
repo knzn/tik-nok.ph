@@ -33,6 +33,39 @@ export interface Video {
   updatedAt: string
 }
 
+export interface VideoReport {
+  _id: string
+  videoId: string | {
+    _id?: string
+    id?: string
+    title: string
+    thumbnailUrl?: string
+    userId: string | {
+      _id: string
+      username: string
+      displayName: string
+      profilePicture?: string
+    }
+  }
+  reporterId: string | {
+    _id: string
+    username: string
+    displayName: string
+    profilePicture?: string
+  }
+  reason: string
+  details?: string
+  status: 'pending' | 'reviewed' | 'dismissed'
+  reviewedBy?: string | {
+    _id: string
+    username: string
+    displayName: string
+    profilePicture?: string
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Comment {
   _id: string
   content: string
@@ -171,5 +204,30 @@ export const deleteComment = async (commentId: string): Promise<{ message: strin
 // Dashboard Statistics
 export const getDashboardStats = async (): Promise<DashboardStats> => {
   const response = await api.get('/admin/stats')
+  return response.data
+}
+
+// Video Reports Management
+export const getVideoReports = async (): Promise<VideoReport[]> => {
+  const response = await api.get('/admin/reports/videos')
+  return response.data
+}
+
+export const reviewVideoReport = async (
+  reportId: string,
+  action: 'hide' | 'delete' | 'dismiss',
+  reason?: string
+): Promise<{ message: string }> => {
+  const response = await api.patch(`/admin/reports/videos/${reportId}/review`, { 
+    action,
+    reason 
+  })
+  return response.data
+}
+
+export const permanentlyDeleteVideo = async (
+  videoId: string
+): Promise<{ message: string }> => {
+  const response = await api.delete(`/admin/videos/${videoId}/permanent`)
   return response.data
 } 

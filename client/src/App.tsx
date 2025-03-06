@@ -24,6 +24,7 @@ import AdminIndex from './pages/admin'
 import AdminUsers from './pages/admin/Users'
 import AdminVideos from './pages/admin/Videos'
 import AdminComments from './pages/admin/Comments'
+import ReportedVideos from './pages/admin/ReportedVideos'
 
 function App() {
   return (
@@ -91,6 +92,14 @@ function App() {
               element={
                 <RoleProtectedRoute allowedRoles={['ADMIN', 'MODERATOR']}>
                   <AdminVideos />
+                </RoleProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/reported-videos" 
+              element={
+                <RoleProtectedRoute allowedRoles={['ADMIN', 'MODERATOR']}>
+                  <ReportedVideos />
                 </RoleProtectedRoute>
               } 
             />

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuthStore } from '../../stores/authStore'
 
 interface RoleProtectedRouteProps {
   children: React.ReactNode
@@ -11,7 +11,7 @@ export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
   children, 
   allowedRoles 
 }) => {
-  const { user, isAuthenticated, isLoading, isAdmin, isModerator } = useAuth()
+  const { user, isAuthenticated, isLoading } = useAuthStore()
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -26,6 +26,10 @@ export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />
   }
+
+  // Calculate role-based permissions
+  const isAdmin = user?.role === 'ADMIN'
+  const isModerator = user?.role === 'MODERATOR' || isAdmin
 
   // Check if user has the required role
   const hasRequiredRole = 

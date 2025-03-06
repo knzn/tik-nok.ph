@@ -6,7 +6,8 @@ import {
   Video, 
   MessageSquare, 
   Settings,
-  ChevronRight
+  ChevronRight,
+  Flag
 } from 'lucide-react'
 
 interface AdminLayoutProps {
@@ -32,6 +33,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       path: '/admin/videos', 
       label: 'Videos', 
       icon: <Video className="h-5 w-5" /> 
+    },
+    {
+      path: '/admin/reported-videos',
+      label: 'Reported Videos',
+      icon: <Flag className="h-5 w-5" />
     },
     { 
       path: '/admin/comments', 

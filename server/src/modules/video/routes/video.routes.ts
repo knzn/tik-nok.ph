@@ -1,16 +1,16 @@
-import { Router, Request, Response, RequestHandler } from 'express'
+import { Router, Request, Response, RequestHandler, NextFunction } from 'express'
 import multer from 'multer'
 import path from 'path'
 import { promises as fs } from 'fs'
 import { VideoController } from '../controllers/video.controller'
 import { VideoProcessingService } from '../services/video-processing.service'
-import { authMiddleware } from '../../../middleware/auth'
+import { authMiddleware, adminMiddleware, moderatorMiddleware, AuthRequest } from '../../../middleware/auth'
 import { VideoModel } from '../models/video.model'
 import { CommentModel } from '../models/comment.model'
-import { AuthRequest } from '../../auth/types/auth.types'
 import { Types, Document } from 'mongoose'
 import { LikeModel } from '../models/like.model'
 import { SocketService } from '../../../services/socket.service'
+import VideoReport from '../models/report.model'
 
 // Create temp upload directory
 const TEMP_UPLOAD_DIR = path.resolve(process.cwd(), 'uploads', 'temp')
@@ -57,8 +57,10 @@ const router = Router()
 const videoProcessingService = new VideoProcessingService()
 const videoController = new VideoController(videoProcessingService)
 
-// Cast auth middleware to RequestHandler
-const typedAuthMiddleware = authMiddleware as RequestHandler
+// Update the typedAuthMiddleware to use the correct AuthRequest type
+const typedAuthMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  authMiddleware(req as AuthRequest, res, next)
+}
 
 // Define the User document structure
 interface UserDocument extends Document {
@@ -77,13 +79,24 @@ interface CommentDocument extends Document {
   updatedAt: Date
 }
 
+// Add this function to verify user is authenticated before executing handlers
+function ensureAuthenticated(req: Request, res: Response): string | false {
+  const authReq = req as AuthRequest;
+  if (!authReq.user?.id) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+  return authReq.user.id;
+}
+
 // Comment handlers with proper typing
 const addCommentHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId } = req.params
     const { content } = req.body
-    const authReq = req as AuthRequest
-    const userId = authReq.user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     const comment = await CommentModel.create({
       content,
@@ -131,8 +144,9 @@ const getCommentsHandler: RequestHandler = async (req, res, next) => {
 const deleteCommentHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId, commentId } = req.params
-    const authReq = req as AuthRequest
-    const userId = authReq.user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     const comment = await CommentModel.findById(commentId)
     if (!comment) {
@@ -161,8 +175,9 @@ const updateCommentHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId, commentId } = req.params
     const { content } = req.body
-    const authReq = req as AuthRequest
-    const userId = authReq.user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     const comment = await CommentModel.findById(commentId)
     if (!comment) {
@@ -214,15 +229,35 @@ const updateCommentHandler: RequestHandler = async (req, res, next) => {
   }
 }
 
-// Cast controller methods to RequestHandler
-const uploadHandler: RequestHandler = async (req, res, next) => {
-  try {
-    await videoController.upload(req as AuthRequest, res)
-  } catch (error) {
-    console.error('Upload error:', error)
-    next(error)
-  }
-}
+// Create a wrapper for the video controller to handle type differences
+const wrapControllerMethod = (handler: (req: any, res: Response) => Promise<void>) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Get the authenticated user ID
+      const userId = ensureAuthenticated(req, res);
+      if (!userId) return;
+      
+      // Create a compatible request object with the structure expected by the controller
+      const compatibleReq = {
+        ...req,
+        user: {
+          id: userId,
+          email: (req as AuthRequest).user?.email || '',
+          username: (req as AuthRequest).user?.username || '',
+          // Don't include profilePicture as it's not in the middleware AuthRequest
+          profilePicture: undefined
+        }
+      };
+      
+      await handler(compatibleReq, res);
+    } catch (error) {
+      next(error);
+    }
+  };
+};
+
+// Update the uploadHandler to use the wrapper
+const uploadHandler: RequestHandler = wrapControllerMethod(videoController.upload);
 
 // Add logging middleware
 router.use((req, res, next) => {
@@ -268,7 +303,9 @@ router.patch('/:videoId/comments/:commentId', typedAuthMiddleware, updateComment
 const deleteVideoHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId } = req.params
-    const userId = (req as AuthRequest).user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     const video = await VideoModel.findById(videoId)
     if (!video) {
@@ -293,7 +330,9 @@ const updateVideoHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId } = req.params
     const { title, description, visibility } = req.body
-    const userId = (req as AuthRequest).user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     const video = await VideoModel.findById(videoId)
     if (!video) {
@@ -369,8 +408,9 @@ const addReplyHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId, commentId } = req.params
     const { content } = req.body
-    const authReq = req as AuthRequest
-    const userId = authReq.user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
 
     const parentComment = await CommentModel.findById(commentId)
     if (!parentComment) {
@@ -409,7 +449,10 @@ router.post('/:videoId/comments/:commentId/replies', typedAuthMiddleware, addRep
 const toggleLikeHandler: RequestHandler = async (req, res, next) => {
   try {
     const { videoId } = req.params
-    const userId = (req as AuthRequest).user.id
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
+    
     const { type } = req.body // 'like' or 'dislike'
 
     const video = await VideoModel.findById(videoId)
@@ -460,5 +503,146 @@ const toggleLikeHandler: RequestHandler = async (req, res, next) => {
 
 // Add the routes
 router.post('/:videoId/like', typedAuthMiddleware, toggleLikeHandler)
+
+// Define report handlers
+const reportVideoHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const { videoId } = req.params
+    const { reason, details } = req.body
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
+
+    // Check if the video exists
+    const video = await VideoModel.findById(videoId)
+    if (!video) {
+      res.status(404).json({ message: 'Video not found' })
+      return
+    }
+
+    // Create a new report
+    const report = await VideoReport.create({
+      videoId,
+      reporterId: userId,
+      reason,
+      details
+    })
+
+    // Since we don't have the notification service, we'll just log this
+    console.log(`Video ${videoId} reported by user ${userId} for reason: ${reason}`)
+    
+    res.status(201).json({
+      message: 'Video reported successfully',
+      reportId: report._id
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const getAllReportsHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const reports = await VideoReport.find()
+      .populate('videoId', 'title thumbnailUrl userId')
+      .populate('reporterId', 'username displayName profilePicture')
+      .populate('videoId.userId', 'username displayName profilePicture')
+      .populate('reviewedBy', 'username displayName profilePicture')
+      .sort({ createdAt: -1 })
+
+    res.status(200).json(reports)
+  } catch (error) {
+    next(error)
+  }
+}
+
+const reviewReportHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const { reportId } = req.params
+    const { action, reason } = req.body
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
+
+    const report = await VideoReport.findById(reportId)
+    if (!report) {
+      res.status(404).json({ message: 'Report not found' })
+      return
+    }
+
+    // Update report status
+    report.status = 'reviewed'
+    report.reviewedBy = userId
+
+    // Process based on action
+    if (action === 'hide') {
+      // Hide the video
+      await VideoModel.findByIdAndUpdate(report.videoId, { 
+        isHidden: true,
+        moderationStatus: 'rejected',
+        moderationReason: reason || 'Reported content violation'
+      })
+
+      // We're relying on the middleware to check roles now
+      // Just log the action
+      console.log(`Video ${report.videoId} has been hidden due to a report. Reporter: ${report.reporterId}, Reviewer: ${userId}`)
+    } else if (action === 'dismiss') {
+      report.status = 'dismissed'
+    }
+
+    await report.save()
+
+    res.status(200).json({
+      message: 'Report reviewed successfully',
+      status: report.status,
+      action
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const permanentlyDeleteVideoHandler: RequestHandler = async (req, res, next) => {
+  try {
+    const { videoId } = req.params
+    
+    const userId = ensureAuthenticated(req, res);
+    if (!userId) return;
+    
+    // Check if video exists
+    const video = await VideoModel.findById(videoId)
+    if (!video) {
+      res.status(404).json({ message: 'Video not found' })
+      return
+    }
+
+    // First, delete all files from storage
+    try {
+      await videoProcessingService.deleteVideoFiles(videoId);
+      console.log(`Successfully deleted files for video ${videoId} from storage`);
+    } catch (error) {
+      console.error(`Error deleting files for video ${videoId}:`, error);
+      // Continue with database deletion even if file deletion fails
+    }
+
+    // Delete the video permanently from the database
+    await VideoModel.findByIdAndDelete(videoId)
+
+    // Update related reports
+    await VideoReport.updateMany(
+      { videoId, status: 'pending' },
+      { status: 'reviewed', reviewedBy: userId }
+    )
+
+    res.status(200).json({ message: 'Video permanently deleted' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Report routes - replace the old ones with these
+router.post('/:videoId/report', typedAuthMiddleware, reportVideoHandler)
+router.get('/reports', authMiddleware, moderatorMiddleware, getAllReportsHandler)
+router.patch('/reports/:reportId/review', authMiddleware, moderatorMiddleware, reviewReportHandler)
+router.delete('/:videoId/permanent', authMiddleware, adminMiddleware, permanentlyDeleteVideoHandler)
 
 export default router 
